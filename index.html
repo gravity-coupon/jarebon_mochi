@@ -294,6 +294,7 @@ let mySubmitted = false;
 let myLastSubmittedText = "";
 let gamePhase = "idle";
 let guestReconnectTimer = null;
+let guestConnGeneration = 0;
 
 const TOPICS = [
   "ある日、猫が空を飛んだ","世界一まずい料理を作った男","タイムマシンが壊れた日",
@@ -508,6 +509,7 @@ function handleHostMessage(conn, data) {
         gamePhase,
         gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
         roundDoneList: [...roundDone],
+        playerAlreadySubmitted: roundDone.has(idx),
         topicsDone: topicsCollected ? topicsCollected.filter(t => t !== undefined).length : 0,
         totalPlayers: players.length,
       });
@@ -540,6 +542,8 @@ function joinRoom(rejoinInfo) {
   if (rid.length !== 5 || !name) return;
   roomId = rid;
   isHost = false;
+  guestConnGeneration++;
+  const myGen = guestConnGeneration;
 
   if (!isRejoin) {
     document.getElementById('join-error').textContent = '';
@@ -553,10 +557,12 @@ function joinRoom(rejoinInfo) {
   peer = new Peer(undefined, { debug: 0 });
 
   peer.on('open', () => {
+    if (myGen !== guestConnGeneration) return;
     const conn = peer.connect('watashibunko-' + rid);
     hostConn = conn;
 
     conn.on('open', () => {
+      if (myGen !== guestConnGeneration) return;
       showBanner('ok');
       if (isRejoin) {
         conn.send({ type: 'rejoin', playerIndex: rejoinInfo.myIndex, name });
@@ -565,14 +571,19 @@ function joinRoom(rejoinInfo) {
       }
     });
 
-    conn.on('data', handleGuestMessage);
+    conn.on('data', (d) => {
+      if (myGen !== guestConnGeneration) return;
+      handleGuestMessage(d);
+    });
 
     conn.on('close', () => {
+      if (myGen !== guestConnGeneration) return;
       showBanner('reconnecting', '🔄 ホストに再接続中...');
       scheduleGuestReconnect();
     });
 
     conn.on('error', () => {
+      if (myGen !== guestConnGeneration) return;
       if (!isRejoin) {
         document.getElementById('join-error').textContent = '接続に失敗しました';
         document.getElementById('join-btn').textContent = '参加する';
@@ -584,6 +595,7 @@ function joinRoom(rejoinInfo) {
   });
 
   peer.on('error', () => {
+    if (myGen !== guestConnGeneration) return;
     if (!isRejoin) {
       document.getElementById('join-error').textContent = 'ルームが見つかりません';
       document.getElementById('join-btn').textContent = '参加する';
@@ -595,6 +607,7 @@ function joinRoom(rejoinInfo) {
 
   if (!isRejoin) {
     setTimeout(() => {
+      if (myGen !== guestConnGeneration) return;
       if (document.getElementById('join-btn').textContent === '接続中...') {
         document.getElementById('join-error').textContent = '接続がタイムアウトしました';
         document.getElementById('join-btn').textContent = '参加する';
@@ -631,6 +644,7 @@ function handleGuestMessage(data) {
     gameState = data.gameState;
     roundDone = new Set(data.roundDoneList || []);
     showBanner('ok');
+    if (guestReconnectTimer) { clearTimeout(guestReconnectTimer); guestReconnectTimer = null; }
     saveState();
 
     if (gamePhase === 'lobby') {
@@ -640,6 +654,12 @@ function handleGuestMessage(data) {
       showScreen('topic');
     } else if (gamePhase === 'writing' && gameState) {
       startWritingRound(gameState.currentRound);
+      // If this player already submitted this round, restore submitted UI
+      if (data.playerAlreadySubmitted) {
+        mySubmitted = true;
+        document.getElementById('write-submitted-msg').classList.remove('hidden');
+        document.getElementById('write-submit-btn').textContent = '再提出';
+      }
     } else if (gamePhase === 'results' && gameState) {
       showResults();
     }
@@ -980,6 +1000,6 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v2.0</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v2.1</div>
 </body>
 </html>
