@@ -244,7 +244,17 @@
         oninput="updateCharCount()"></textarea>
     </div>
     <p id="write-char" class="char-count char-ok">0 / 100</p>
-    <button class="btn btn-primary btn-full" onclick="submitPart()">送信</button>
+    <button id="write-submit-btn" class="btn btn-primary btn-full" onclick="submitPart()">送信</button>
+    <div id="write-submitted-msg" class="hidden text-center" style="margin-top:12px;">
+      <p style="color:#4ecdc4;font-size:14px;">✓ 送信済み（他のプレイヤーが完了するまで再提出できます）</p>
+    </div>
+    <div style="margin-top:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span class="text-dim" style="font-size:13px;">進捗</span>
+        <span class="text-dim" style="font-size:13px;"><span id="write-done">0</span> / <span id="write-total">0</span> 人が完了</span>
+      </div>
+      <div class="progress-bar"><div id="write-progress" class="progress-fill" style="width:0%;"></div></div>
+    </div>
   </div>
 </div>
 
@@ -273,6 +283,8 @@ let topicsCollected = [];
 let gameState = null;
 let roundDone = new Set();
 let myStoryIndex = -1;
+let mySubmitted = false;
+let myLastSubmittedText = "";
 
 const TOPICS = [
   "ある日、猫が空を飛んだ","世界一まずい料理を作った男","タイムマシンが壊れた日",
@@ -401,7 +413,7 @@ function handleHostMessage(conn, data) {
   } else if (data.type === 'topicSubmit') {
     handleTopicFromPlayer(conn._playerIndex, data.topic);
   } else if (data.type === 'partSubmit') {
-    handlePartFromPlayer(conn._playerIndex, data.storyIndex, data.round, data.text);
+    handlePartFromPlayer(conn._playerIndex, data.storyIndex, data.round, data.text, data.isResubmit);
   }
 }
 
@@ -471,7 +483,7 @@ function handleGuestMessage(data) {
     Object.assign(gameState, data.gameState);
     startWritingRound(gameState.currentRound);
   } else if (data.type === 'roundProgress') {
-    updateWaiting(data.count, gameState.numPlayers);
+    updateWriteProgress(data.count, gameState.numPlayers);
   } else if (data.type === 'showResults') {
     gameState = data.gameState;
     showResults();
@@ -532,6 +544,8 @@ function startWritingRound(round) {
     if (getWriterForStoryAtRound(s, round, np, gameState.shifts) === idx) { si = s; break; }
   }
   myStoryIndex = si;
+  mySubmitted = false;
+  myLastSubmittedText = "";
   roundDone = new Set();
 
   document.getElementById('write-title').textContent = '📖 ' + gameState.stories[si].title;
@@ -546,7 +560,10 @@ function startWritingRound(round) {
   }
 
   document.getElementById('write-input').value = '';
+  document.getElementById('write-submitted-msg').classList.add('hidden');
+  document.getElementById('write-submit-btn').textContent = '送信';
   updateCharCount();
+  updateWriteProgress(0, np);
   showScreen('writing');
 }
 
@@ -562,27 +579,44 @@ let roundAdvanced = false;
 function submitPart() {
   const text = document.getElementById('write-input').value.trim();
   if (!text) return;
+  const isResubmit = mySubmitted;
+  mySubmitted = true;
+  myLastSubmittedText = text;
+
+  document.getElementById('write-submitted-msg').classList.remove('hidden');
+  document.getElementById('write-submit-btn').textContent = '再提出';
+
   if (isHost) {
     roundAdvanced = false;
-    handlePartFromPlayer(0, myStoryIndex, gameState.currentRound, text);
-    // Only show waiting if handlePartFromPlayer did NOT advance the game
+    handlePartFromPlayer(0, myStoryIndex, gameState.currentRound, text, isResubmit);
     if (!roundAdvanced) {
-      showWaiting(roundDone.size, gameState.numPlayers);
+      updateWriteProgress(roundDone.size, gameState.numPlayers);
     }
   } else {
-    hostConn.send({ type: 'partSubmit', storyIndex: myStoryIndex, round: gameState.currentRound, text });
-    showWaiting(0, gameState.numPlayers);
+    hostConn.send({ type: 'partSubmit', storyIndex: myStoryIndex, round: gameState.currentRound, text, isResubmit });
   }
 }
 
-function handlePartFromPlayer(pIdx, storyIndex, round, text) {
+function handlePartFromPlayer(pIdx, storyIndex, round, text, isResubmit) {
   const pName = players[pIdx];
-  gameState.stories[storyIndex].parts.push({ author: pName, text });
-  roundDone.add(pIdx);
+  if (isResubmit) {
+    // Replace the last part this player wrote for this story in this round
+    const parts = gameState.stories[storyIndex].parts;
+    // Find and replace the part by this author for this round
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (parts[i].author === pName && parts[i]._round === round) {
+        parts[i].text = text;
+        break;
+      }
+    }
+  } else {
+    gameState.stories[storyIndex].parts.push({ author: pName, text, _round: round });
+    roundDone.add(pIdx);
+  }
   const doneCount = roundDone.size;
 
   broadcast({ type: 'roundProgress', count: doneCount });
-  updateWaiting(doneCount, gameState.numPlayers);
+  updateWriteProgress(doneCount, gameState.numPlayers);
 
   if (doneCount === gameState.numPlayers) {
     roundAdvanced = true;
@@ -611,6 +645,12 @@ function updateWaiting(done, total) {
   document.getElementById('wait-done').textContent = done;
   document.getElementById('wait-total').textContent = total;
   document.getElementById('wait-progress').style.width = (done / total * 100) + '%';
+}
+
+function updateWriteProgress(done, total) {
+  document.getElementById('write-done').textContent = done;
+  document.getElementById('write-total').textContent = total;
+  document.getElementById('write-progress').style.width = (done / total * 100) + '%';
 }
 
 // ===================== RESULTS =====================
@@ -662,6 +702,6 @@ function playAgain() {
   showScreen('title');
 }
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#445;opacity:0.5;font-family:monospace;">v1.3</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.4</div>
 </body>
 </html>
