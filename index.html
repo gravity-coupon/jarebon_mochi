@@ -6,6 +6,7 @@
 <title>わたし文庫 - みんなで繋ぐ即興リレー小説</title>
 <link href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@400;700&family=Noto+Serif+JP:wght@400;700;900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -263,8 +264,15 @@
   <h2 class="gradient-title text-center mb-8" style="font-size:28px;">完成した物語</h2>
   <p id="results-subtitle" class="text-center text-dim mb-24"></p>
   <div id="results-tabs" class="flex-center mb-24"></div>
-  <div id="results-story" class="card"></div>
-  <div class="text-center" style="margin-top:32px;">
+  <div id="results-story-wrapper">
+    <div id="results-story" class="card"></div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap;">
+    <button class="btn btn-secondary" onclick="copyStoryAsText()" style="padding:10px 20px;font-size:14px;">📋 テキストをコピー</button>
+    <button class="btn btn-secondary" onclick="saveStoryAsImage()" style="padding:10px 20px;font-size:14px;">📸 画像として保存</button>
+  </div>
+  <p id="copy-feedback" class="text-center" style="font-size:13px;margin-top:8px;color:#4ecdc4;opacity:0;transition:opacity 0.3s;"></p>
+  <div class="text-center" style="margin-top:24px;">
     <button class="btn btn-gold" onclick="playAgain()">もう一度遊ぶ</button>
   </div>
 </div>
@@ -711,7 +719,61 @@ function playAgain() {
   gameState = null; topicsCollected = []; roundDone = new Set();
   showScreen('title');
 }
+
+// ===================== COPY & SCREENSHOT =====================
+function copyStoryAsText() {
+  const story = gameState.stories[currentStoryView];
+  let text = '📖 わたし文庫\n';
+  text += '━━━━━━━━━━━━━━━━\n';
+  text += '「' + story.title + '」\n';
+  text += '━━━━━━━━━━━━━━━━\n\n';
+  story.parts.forEach((part, i) => {
+    text += '【ページ ' + (i + 1) + '】' + part.author + '\n';
+    text += part.text + '\n\n';
+  });
+  text += '━━━━━━━━━━━━━━━━';
+
+  navigator.clipboard.writeText(text).then(() => {
+    showCopyFeedback('テキストをコピーしました！');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showCopyFeedback('テキストをコピーしました！');
+  });
+}
+
+function saveStoryAsImage() {
+  const el = document.getElementById('results-story');
+  showCopyFeedback('画像を生成中...');
+  html2canvas(el, {
+    backgroundColor: '#16213e',
+    scale: 2,
+    useCORS: true,
+  }).then(canvas => {
+    const link = document.createElement('a');
+    const story = gameState.stories[currentStoryView];
+    link.download = 'わたし文庫_' + story.title.slice(0, 10) + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    showCopyFeedback('画像を保存しました！');
+  }).catch(() => {
+    showCopyFeedback('画像の生成に失敗しました');
+  });
+}
+
+function showCopyFeedback(msg) {
+  const el = document.getElementById('copy-feedback');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.6</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.7</div>
 </body>
 </html>
