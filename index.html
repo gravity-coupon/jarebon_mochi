@@ -305,7 +305,9 @@ function getWriterForStoryAtRound(si, round, np, shifts) {
 
 // ===================== SCREEN MANAGEMENT =====================
 const screens = ['title','host','join','lobby','topic','waiting','writing','results'];
+let currentScreenName = 'title';
 function showScreen(name) {
+  currentScreenName = name;
   screens.forEach(s => {
     document.getElementById('screen-' + s).classList.toggle('hidden', s !== name);
   });
@@ -490,11 +492,15 @@ function submitTopic() {
   const topic = document.getElementById('topic-input').value.trim();
   if (!topic) return;
   if (isHost) {
+    const screenBefore = currentScreenName;
     handleTopicFromPlayer(0, topic);
+    if (currentScreenName === screenBefore || currentScreenName === 'topic') {
+      showWaiting(topicsCollected.filter(t => t !== undefined).length, players.length);
+    }
   } else {
     hostConn.send({ type: 'topicSubmit', topic });
+    showWaiting(0, players.length);
   }
-  showWaiting(0, players.length);
 }
 
 function handleTopicFromPlayer(pIdx, topic) {
@@ -548,11 +554,19 @@ function submitPart() {
   const text = document.getElementById('write-input').value.trim();
   if (!text) return;
   if (isHost) {
-    handlePartFromPlayer(0, myStoryIndex, gameState.currentRound, text);
+    // handlePartFromPlayer may synchronously advance the round or show results,
+    // so only show waiting if the round did NOT complete.
+    const roundBefore = gameState.currentRound;
+    const screenBefore = currentScreenName;
+    handlePartFromPlayer(0, myStoryIndex, roundBefore, text);
+    // If handlePartFromPlayer already moved us to a new screen, don't overwrite
+    if (currentScreenName === screenBefore || currentScreenName === 'writing') {
+      showWaiting(roundDone.size, gameState.numPlayers);
+    }
   } else {
     hostConn.send({ type: 'partSubmit', storyIndex: myStoryIndex, round: gameState.currentRound, text });
+    showWaiting(0, gameState.numPlayers);
   }
-  showWaiting(isHost ? 1 : 0, gameState.numPlayers);
 }
 
 function handlePartFromPlayer(pIdx, storyIndex, round, text) {
