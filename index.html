@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>わたし文庫 - みんなで繋ぐ即興リレー小説</title>
-<link href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@400;700&family=Noto+Serif+JP:wght@400;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: 'Kaisei Decol', 'Noto Serif JP', serif;
+    font-family: 'Noto Sans JP', sans-serif;
     color: #eee;
     min-height: 100vh;
     background: linear-gradient(160deg, #1a1a2e 0%, #0f0f23 50%, #1a1033 100%);
@@ -46,7 +46,7 @@
     color: #eee; font-size: 16px; font-family: inherit; outline: none;
     transition: border-color 0.2s; box-sizing: border-box;
   }
-  textarea.input-field { resize: vertical; min-height: 100px; }
+  textarea.input-field { resize: vertical; min-height: 160px; }
 
   .badge {
     display: inline-block; padding: 4px 12px; border-radius: 20px;
@@ -240,7 +240,7 @@
       <p id="write-prev-text" style="font-size:15px;line-height:1.8;"></p>
     </div>
     <div class="mb-8">
-      <textarea id="write-input" class="input-field" placeholder="物語の続きを書いてください..." maxlength="100" rows="4"
+      <textarea id="write-input" class="input-field" placeholder="物語の続きを書いてください..." maxlength="100" rows="6"
         oninput="updateCharCount()"></textarea>
     </div>
     <p id="write-char" class="char-count char-ok">0 / 100</p>
@@ -785,6 +785,6 @@ function showCopyFeedback(msg) {
   el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.9</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.11</div>
 </body>
 </html>
