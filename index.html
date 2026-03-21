@@ -128,19 +128,9 @@
   .flex-center { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
   .flex-col { display: flex; flex-direction: column; gap: 16px; }
   .flex-row { display: flex; gap: 8px; align-items: center; }
-
-  .conn-banner {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 999;
-    text-align: center; font-size: 13px; font-weight: 700;
-    padding: 6px; transition: transform 0.3s ease;
-    transform: translateY(-100%);
-  }
-  .conn-banner.reconnecting { background: #f0c040; color: #1a1a2e; transform: translateY(0); }
-  .conn-banner.ok { transform: translateY(-100%); }
 </style>
 </head>
 <body>
-<div id="conn-banner" class="conn-banner ok"></div>
 
 <!-- ====== Title Screen ====== -->
 <div id="screen-title" class="screen container text-center" style="padding-top:60px;">
@@ -302,8 +292,6 @@ let roundDone = new Set();
 let myStoryIndex = -1;
 let mySubmitted = false;
 let myLastSubmittedText = "";
-let gamePhase = "idle"; // idle, lobby, topic, writing, results
-let guestConnGen = 0;   // generation counter to ignore stale connection events
 
 const TOPICS = [
   "ある日、猫が空を飛んだ","世界一まずい料理を作った男","タイムマシンが壊れた日",
@@ -311,37 +299,6 @@ const TOPICS = [
   "夢の中で出会った不思議な店","突然しっぽが生えてきた","逆さまの街",
   "100年後の夏休み","宇宙人がコンビニでバイトを始めた","魔法が使えるのは寝ている間だけ",
 ];
-
-// ===================== PERSISTENCE =====================
-const LS_KEY = 'watashibunko_state';
-
-function saveState() {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify({
-      isHost, roomId, myIndex, numPages, players,
-      topicsCollected: topicsCollected || [],
-      gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
-      roundDoneList: [...roundDone],
-      gamePhase,
-      playerName: isHost ? (players[0] || '') : (players[myIndex] || ''),
-    }));
-  } catch(e) {}
-}
-
-function loadState() {
-  try { const s = localStorage.getItem(LS_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
-}
-
-function clearState() {
-  try { localStorage.removeItem(LS_KEY); } catch(e) {}
-}
-
-// ===================== CONNECTION BANNER =====================
-function showBanner(state, msg) {
-  const el = document.getElementById('conn-banner');
-  el.className = 'conn-banner ' + state;
-  el.textContent = msg || '';
-}
 
 // ===================== HELPERS =====================
 function generateRoomId() {
@@ -389,40 +346,7 @@ function showScreen(name) {
 function backToTitle() {
   if (peer) { peer.destroy(); peer = null; }
   connections = []; hostConn = null;
-  clearState();
-  showBanner('ok');
   showScreen('title');
-}
-
-// ===================== HOST PEER SETUP =====================
-function initHostPeer(rid, onReady) {
-  if (peer && !peer.destroyed) peer.destroy();
-  peer = new Peer('watashibunko-' + rid, { debug: 0 });
-
-  peer.on('open', () => {
-    showBanner('ok');
-    if (onReady) onReady();
-  });
-
-  peer.on('connection', (conn) => {
-    conn.on('open', () => {
-      conn.on('data', (data) => handleHostMessage(conn, data));
-      conn.on('close', () => { console.log('Guest disconnected:', conn._playerName); });
-    });
-  });
-
-  peer.on('disconnected', () => {
-    showBanner('reconnecting', '🔄 再接続中...');
-    setTimeout(() => { if (peer && !peer.destroyed) peer.reconnect(); }, 2000);
-  });
-
-  peer.on('error', (e) => {
-    console.error('Host peer error:', e.type);
-    if (e.type === 'unavailable-id') {
-      showBanner('reconnecting', '🔄 再接続中...');
-      setTimeout(() => initHostPeer(rid, onReady), 3000);
-    }
-  });
 }
 
 // ===================== HOST SETUP =====================
@@ -430,23 +354,29 @@ function showHostSetup() {
   isHost = true;
   myIndex = 0;
   roomId = generateRoomId();
-  gamePhase = 'lobby';
   document.getElementById('host-room-code').textContent = roomId;
   renderPageSelect();
   showScreen('host');
 
-  initHostPeer(roomId, () => {
+  peer = new Peer('watashibunko-' + roomId, { debug: 0 });
+  peer.on('open', () => {
     const name = document.getElementById('host-name').value.trim() || 'ホスト';
     players = [name];
     renderHostPlayers();
-    saveState();
   });
+  peer.on('connection', (conn) => {
+    conn.on('open', () => {
+      conn.on('data', (data) => handleHostMessage(conn, data));
+    });
+    connections.push(conn);
+  });
+  peer.on('error', (e) => console.error('Peer error', e));
 
-  document.getElementById('host-name').oninput = () => {
-    players[0] = document.getElementById('host-name').value.trim() || 'ホスト';
+  document.getElementById('host-name').addEventListener('input', () => {
+    const name = document.getElementById('host-name').value.trim() || 'ホスト';
+    players[0] = name;
     renderHostPlayers();
-    saveState();
-  };
+  });
 }
 
 function renderPageSelect() {
@@ -494,33 +424,9 @@ function handleHostMessage(conn, data) {
     players.push(data.name);
     conn._playerIndex = players.length - 1;
     conn._playerName = data.name;
-    connections = connections.filter(c => c._playerIndex !== conn._playerIndex);
-    connections.push(conn);
     conn.send({ type: 'joined', playerIndex: conn._playerIndex, players: [...players] });
     broadcast({ type: 'playerList', players: [...players] }, conn);
     renderHostPlayers();
-    saveState();
-
-  } else if (data.type === 'rejoin') {
-    // Guest reconnecting after reload — send them current state
-    const idx = data.playerIndex;
-    if (idx >= 0 && idx < players.length) {
-      conn._playerIndex = idx;
-      conn._playerName = players[idx];
-      connections = connections.filter(c => c._playerIndex !== idx);
-      connections.push(conn);
-      conn.send({
-        type: 'rejoinState',
-        playerIndex: idx,
-        players: [...players],
-        gamePhase,
-        gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
-        roundDoneList: [...roundDone],
-        playerAlreadySubmitted: roundDone.has(idx),
-        totalPlayers: players.length,
-      });
-    }
-
   } else if (data.type === 'topicSubmit') {
     handleTopicFromPlayer(conn._playerIndex, data.topic);
   } else if (data.type === 'partSubmit') {
@@ -539,94 +445,38 @@ function showJoin() {
   document.getElementById('join-error').textContent = '';
 }
 
-function joinRoom(rejoinInfo) {
-  const rid = rejoinInfo ? rejoinInfo.roomId : document.getElementById('join-room').value.trim();
-  const name = rejoinInfo ? rejoinInfo.playerName : document.getElementById('join-name').value.trim();
-  const isRejoin = !!rejoinInfo;
-
+function joinRoom() {
+  const rid = document.getElementById('join-room').value.trim();
+  const name = document.getElementById('join-name').value.trim();
   if (rid.length !== 5 || !name) return;
-  roomId = rid;
-  isHost = false;
-  guestConnGen++;
-  const myGen = guestConnGen;
+  document.getElementById('join-error').textContent = '';
+  document.getElementById('join-btn').textContent = '接続中...';
+  document.getElementById('join-btn').disabled = true;
 
-  if (!isRejoin) {
-    document.getElementById('join-error').textContent = '';
-    document.getElementById('join-btn').textContent = '接続中...';
-    document.getElementById('join-btn').disabled = true;
-  } else {
-    showBanner('reconnecting', '🔄 再接続中...');
-  }
-
-  if (peer && !peer.destroyed) peer.destroy();
   peer = new Peer(undefined, { debug: 0 });
-
   peer.on('open', () => {
-    if (myGen !== guestConnGen) return;
     const conn = peer.connect('watashibunko-' + rid);
     hostConn = conn;
-
-    conn.on('open', () => {
-      if (myGen !== guestConnGen) return;
-      if (isRejoin) {
-        conn.send({ type: 'rejoin', playerIndex: rejoinInfo.myIndex, name });
-      } else {
-        conn.send({ type: 'join', name });
-      }
-    });
-
-    conn.on('data', (d) => {
-      if (myGen !== guestConnGen) return;
-      handleGuestMessage(d);
-    });
-
-    conn.on('close', () => {
-      if (myGen !== guestConnGen) return;
-      showBanner('reconnecting', '🔄 ホストに再接続中...');
-      setTimeout(() => {
-        if (myGen !== guestConnGen) return;
-        const saved = loadState();
-        if (saved && !saved.isHost && saved.roomId && saved.playerName) {
-          joinRoom({ roomId: saved.roomId, myIndex: saved.myIndex, playerName: saved.playerName });
-        }
-      }, 3000);
-    });
-
+    conn.on('open', () => { conn.send({ type: 'join', name }); });
+    conn.on('data', handleGuestMessage);
     conn.on('error', () => {
-      if (myGen !== guestConnGen) return;
-      if (!isRejoin) {
-        document.getElementById('join-error').textContent = '接続に失敗しました';
-        document.getElementById('join-btn').textContent = '参加する';
-        document.getElementById('join-btn').disabled = false;
-      }
-    });
-  });
-
-  peer.on('error', () => {
-    if (myGen !== guestConnGen) return;
-    if (!isRejoin) {
-      document.getElementById('join-error').textContent = 'ルームが見つかりません';
+      document.getElementById('join-error').textContent = '接続に失敗しました';
       document.getElementById('join-btn').textContent = '参加する';
       document.getElementById('join-btn').disabled = false;
-    } else {
-      // Retry rejoin after delay
-      setTimeout(() => {
-        if (myGen !== guestConnGen) return;
-        joinRoom(rejoinInfo);
-      }, 3000);
-    }
+    });
   });
-
-  if (!isRejoin) {
-    setTimeout(() => {
-      if (myGen !== guestConnGen) return;
-      if (document.getElementById('join-btn').textContent === '接続中...') {
-        document.getElementById('join-error').textContent = '接続がタイムアウトしました';
-        document.getElementById('join-btn').textContent = '参加する';
-        document.getElementById('join-btn').disabled = false;
-      }
-    }, 10000);
-  }
+  peer.on('error', () => {
+    document.getElementById('join-error').textContent = 'ルームが見つかりません';
+    document.getElementById('join-btn').textContent = '参加する';
+    document.getElementById('join-btn').disabled = false;
+  });
+  setTimeout(() => {
+    if (document.getElementById('join-btn').textContent === '接続中...') {
+      document.getElementById('join-error').textContent = '接続がタイムアウトしました';
+      document.getElementById('join-btn').textContent = '参加する';
+      document.getElementById('join-btn').disabled = false;
+    }
+  }, 10000);
 }
 
 // ===================== GUEST MESSAGE HANDLER =====================
@@ -634,64 +484,25 @@ function handleGuestMessage(data) {
   if (data.type === 'joined') {
     myIndex = data.playerIndex;
     players = data.players;
-    gamePhase = 'lobby';
     renderLobbyPlayers();
     showScreen('lobby');
-    saveState();
-
-  } else if (data.type === 'rejoinState') {
-    // Full state restore after reconnection
-    myIndex = data.playerIndex;
-    players = data.players;
-    gamePhase = data.gamePhase;
-    gameState = data.gameState;
-    roundDone = new Set(data.roundDoneList || []);
-    showBanner('ok');
-    saveState();
-
-    if (gamePhase === 'lobby') {
-      renderLobbyPlayers();
-      showScreen('lobby');
-    } else if (gamePhase === 'topic') {
-      // Re-show topic screen; player can submit (or re-submit) their topic
-      showScreen('topic');
-    } else if (gamePhase === 'writing' && gameState) {
-      startWritingRound(gameState.currentRound);
-      // If this player already submitted this round, restore submitted UI
-      if (data.playerAlreadySubmitted) {
-        mySubmitted = true;
-        document.getElementById('write-submitted-msg').classList.remove('hidden');
-        document.getElementById('write-submit-btn').textContent = '再提出';
-      }
-      updateWriteProgress(roundDone.size, gameState.numPlayers);
-    } else if (gamePhase === 'results' && gameState) {
-      showResults();
-    }
-
   } else if (data.type === 'playerList') {
     players = data.players;
     renderLobbyPlayers();
   } else if (data.type === 'startTopicPhase') {
-    gamePhase = 'topic';
     showScreen('topic');
-    saveState();
   } else if (data.type === 'topicProgress') {
     updateWaiting(data.count, data.total);
   } else if (data.type === 'startWriting') {
     gameState = data.gameState;
-    gamePhase = 'writing';
-    saveState();
     startWritingRound(gameState.currentRound);
   } else if (data.type === 'nextRound') {
     Object.assign(gameState, data.gameState);
-    saveState();
     startWritingRound(gameState.currentRound);
   } else if (data.type === 'roundProgress') {
     updateWriteProgress(data.count, gameState.numPlayers);
   } else if (data.type === 'showResults') {
     gameState = data.gameState;
-    gamePhase = 'results';
-    saveState();
     showResults();
   }
 }
@@ -699,10 +510,8 @@ function handleGuestMessage(data) {
 // ===================== GAME START =====================
 function startGame() {
   topicsCollected = new Array(players.length);
-  gamePhase = 'topic';
   showScreen('topic');
   broadcast({ type: 'startTopicPhase' });
-  saveState();
 }
 
 // ===================== TOPIC =====================
@@ -732,16 +541,13 @@ function handleTopicFromPlayer(pIdx, topic) {
   const count = topicsCollected.filter(t => t !== undefined).length;
   broadcast({ type: 'topicProgress', count: count, total: players.length });
   updateWaiting(count, players.length);
-  saveState();
   if (count === players.length) {
     topicsComplete = true;
     const np = players.length;
     const shifts = generateRotation(np, numPages);
     const stories = topicsCollected.map((t, i) => ({ title: t, parts: [], originalPlayerIndex: i }));
     gameState = { stories, currentRound: 0, totalRounds: numPages, shifts, numPlayers: np, players: [...players] };
-    gamePhase = 'writing';
     broadcast({ type: 'startWriting', gameState: JSON.parse(JSON.stringify(gameState)) });
-    saveState();
     startWritingRound(0);
   }
 }
@@ -826,21 +632,17 @@ function handlePartFromPlayer(pIdx, storyIndex, round, text, isResubmit) {
 
   broadcast({ type: 'roundProgress', count: doneCount });
   updateWriteProgress(doneCount, gameState.numPlayers);
-  saveState();
 
   if (doneCount === gameState.numPlayers) {
     roundAdvanced = true;
     const next = gameState.currentRound + 1;
     if (next >= gameState.totalRounds) {
-      gamePhase = 'results';
       broadcast({ type: 'showResults', gameState: JSON.parse(JSON.stringify(gameState)) });
-      saveState();
       showResults();
     } else {
       gameState.currentRound = next;
       roundDone = new Set();
       broadcast({ type: 'nextRound', gameState: JSON.parse(JSON.stringify(gameState)) });
-      saveState();
       startWritingRound(next);
     }
   }
@@ -912,8 +714,6 @@ function playAgain() {
   if (peer) { peer.destroy(); peer = null; }
   connections = []; hostConn = null; players = [];
   gameState = null; topicsCollected = []; roundDone = new Set();
-  gamePhase = 'idle';
-  clearState();
   showScreen('title');
 }
 
@@ -969,58 +769,7 @@ function showCopyFeedback(msg) {
   clearTimeout(el._timer);
   el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
-
-// ===================== AUTO-RESTORE ON LOAD =====================
-window.addEventListener('load', () => {
-  const saved = loadState();
-  if (!saved || saved.gamePhase === 'idle') return;
-
-  if (saved.isHost) {
-    // Restore host state, then reconnect peer with same room ID
-    isHost = true;
-    myIndex = 0;
-    roomId = saved.roomId;
-    numPages = saved.numPages;
-    players = saved.players || [];
-    topicsCollected = saved.topicsCollected || [];
-    gameState = saved.gameState;
-    roundDone = new Set(saved.roundDoneList || []);
-    gamePhase = saved.gamePhase;
-
-    if (gamePhase === 'lobby') {
-      document.getElementById('host-room-code').textContent = roomId;
-      document.getElementById('host-name').value = players[0] || '';
-      renderPageSelect();
-      renderHostPlayers();
-      showScreen('host');
-      initHostPeer(roomId);
-      document.getElementById('host-name').oninput = () => {
-        players[0] = document.getElementById('host-name').value.trim() || 'ホスト';
-        renderHostPlayers(); saveState();
-      };
-    } else if (gamePhase === 'topic') {
-      initHostPeer(roomId);
-      showScreen('topic');
-    } else if (gamePhase === 'writing' && gameState) {
-      initHostPeer(roomId);
-      startWritingRound(gameState.currentRound);
-    } else if (gamePhase === 'results' && gameState) {
-      initHostPeer(roomId);
-      showResults();
-    }
-
-  } else {
-    // Guest: reconnect to host
-    myIndex = saved.myIndex;
-    players = saved.players || [];
-    gamePhase = saved.gamePhase;
-    gameState = saved.gameState;
-    isHost = false;
-    roomId = saved.roomId;
-    joinRoom({ roomId: saved.roomId, myIndex: saved.myIndex, playerName: saved.playerName });
-  }
-});
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v2.0</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.8</div>
 </body>
 </html>
