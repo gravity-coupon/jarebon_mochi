@@ -240,7 +240,7 @@
       <p id="write-prev-text" style="font-size:15px;line-height:1.8;"></p>
     </div>
     <div class="mb-8">
-      <textarea id="write-input" class="input-field" placeholder="物語の続きを書いてください..." maxlength="100" rows="6"
+      <textarea id="write-input" class="input-field" style="min-height:180px;height:180px;" placeholder="物語の続きを書いてください..." maxlength="100" rows="6"
         oninput="updateCharCount()"></textarea>
     </div>
     <p id="write-char" class="char-count char-ok">0 / 100</p>
@@ -785,6 +785,6 @@ function showCopyFeedback(msg) {
   el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.12</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.13</div>
 </body>
 </html>
