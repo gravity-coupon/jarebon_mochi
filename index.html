@@ -154,7 +154,8 @@
     <div class="text-center mb-24">
       <p class="text-dim mb-8" style="font-size:14px;">ルームコード</p>
       <div id="host-room-code" class="room-code"></div>
-      <p class="text-dim" style="font-size:13px;margin-top:8px;">このコードを他のプレイヤーに共有してください</p>
+      <button onclick="copyRoomCode()" class="btn btn-ghost" style="padding:6px 16px;font-size:13px;margin-top:8px;">📋 コピー</button>
+      <p id="room-copy-feedback" class="text-dim" style="font-size:13px;margin-top:4px;color:#4ecdc4;opacity:0;transition:opacity 0.3s;"></p>
     </div>
     <div class="mb-20">
       <label class="text-dim" style="font-size:14px;display:block;margin-bottom:6px;">あなたの名前</label>
@@ -293,12 +294,59 @@ let myStoryIndex = -1;
 let mySubmitted = false;
 let myLastSubmittedText = "";
 
-const TOPICS = [
-  "ある日、猫が空を飛んだ","世界一まずい料理を作った男","タイムマシンが壊れた日",
-  "しゃべる自動販売機","月曜日が消えた世界","靴下が片方だけ行方不明になる理由",
-  "夢の中で出会った不思議な店","突然しっぽが生えてきた","逆さまの街",
-  "100年後の夏休み","宇宙人がコンビニでバイトを始めた","魔法が使えるのは寝ている間だけ",
+// ===================== RANDOM TOPIC GENERATOR =====================
+const TOPIC_WHO = [
+  "猫","おばあちゃん","宇宙人","王様","幽霊","ロボット","忍者","赤ちゃん",
+  "探偵","魔法使い","サラリーマン","ペンギン","ドラゴン","泥棒","天使",
+  "海賊","教授","妖精","巨人","タクシー運転手","料理人","時間旅行者",
 ];
+const TOPIC_WHAT = [
+  "空を飛ぶ","恋をする","世界を救う","料理対決をする","宝探しをする",
+  "引っ越す","タイムスリップする","透明になる","巨大化する","入れ替わる",
+  "迷子になる","バンドを組む","選挙に出る","夢の中に閉じ込められる",
+  "しりとりで世界の命運を決める","突然歌い出す","記憶をなくす",
+  "異世界に転生する","コンビニを開く","友達になる","秘密を暴く",
+];
+const TOPIC_WHERE = [
+  "月面で","コンビニで","お城で","海の底で","夢の中で","学校で",
+  "無人島で","地下鉄で","遊園地で","図書館で","火星で","温泉で",
+  "エレベーターの中で","屋上で","森の奥で","空飛ぶ船で",
+];
+const TOPIC_WHEN = [
+  "100年後","世界の終わりの日に","真夜中に","夏休み最終日に",
+  "月曜の朝","卒業式の日に","大晦日に","雨の日に","誕生日に",
+];
+
+function generateRandomTopic() {
+  const r = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const patterns = [
+    () => r(TOPIC_WHEN) + '、' + r(TOPIC_WHO) + 'が' + r(TOPIC_WHAT),
+    () => r(TOPIC_WHERE) + r(TOPIC_WHO) + 'が' + r(TOPIC_WHAT),
+    () => r(TOPIC_WHO) + 'と' + r(TOPIC_WHO) + 'が' + r(TOPIC_WHAT),
+    () => r(TOPIC_WHERE) + r(TOPIC_WHEN) + '、' + r(TOPIC_WHO) + 'が' + r(TOPIC_WHAT),
+  ];
+  return r(patterns)();
+}
+
+// ===================== COPY ROOM CODE =====================
+function copyRoomCode() {
+  const code = document.getElementById('host-room-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    showRoomCopyFeedback('コピーしました！');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = code; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showRoomCopyFeedback('コピーしました！');
+  });
+}
+
+function showRoomCopyFeedback(msg) {
+  const el = document.getElementById('room-copy-feedback');
+  el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
 
 // ===================== HELPERS =====================
 function generateRoomId() {
@@ -531,7 +579,7 @@ function startGame() {
 
 // ===================== TOPIC =====================
 function randomTopic() {
-  document.getElementById('topic-input').value = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+  document.getElementById('topic-input').value = generateRandomTopic();
 }
 
 let topicsComplete = false;
@@ -700,7 +748,7 @@ function renderResultsTabs() {
   gameState.stories.forEach((s, i) => {
     const btn = document.createElement('button');
     btn.className = 'story-tab' + (i === currentStoryView ? ' active' : '');
-    btn.textContent = '物語 ' + (i + 1);
+    btn.textContent = (i + 1) + '. ' + s.title;
     btn.onclick = () => { currentStoryView = i; renderResultsTabs(); renderStory(i); };
     cont.appendChild(btn);
   });
@@ -785,6 +833,6 @@ function showCopyFeedback(msg) {
   el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.13</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.15</div>
 </body>
 </html>
