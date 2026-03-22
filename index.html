@@ -625,6 +625,7 @@ function handleHostMessage(conn, data) {
         type: 'spectatorState',
         gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
         gamePhase,
+        players: [...players],
       });
       return;
     }
@@ -820,11 +821,23 @@ function handleGuestMessage(data) {
     if (peer) { peer.destroy(); peer = null; }
     hostConn = null;
   } else if (data.type === 'spectatorState') {
-    // Spectator mode — show current stories read-only
+    // Spectator mode — show current stories or waiting message
     gameState = data.gameState;
     if (gameState) {
       showResults();
       document.getElementById('results-subtitle').textContent = '👀 観戦中 — 物語が進行中です';
+    } else {
+      // Game hasn't started writing yet (e.g. still in topic phase)
+      showScreen('lobby');
+      document.getElementById('lobby-player-list').innerHTML = '';
+      (data.players || []).forEach((p, i) => {
+        const span = document.createElement('span');
+        span.className = 'badge ' + (i === 0 ? 'badge-gold' : 'badge-green');
+        span.textContent = (i === 0 ? '👑 ' : '') + p;
+        document.getElementById('lobby-player-list').appendChild(span);
+      });
+      document.querySelector('#screen-lobby h2').textContent = '👀 観戦中';
+      document.querySelector('#screen-lobby p.text-dim').textContent = 'プレイヤーがタイトルを決めています...';
     }
   } else if (data.type === 'spectatorUpdate') {
     // Live update for spectators
@@ -887,6 +900,7 @@ function handleTopicFromPlayer(pIdx, topic) {
     gameState = { stories, currentRound: 0, totalRounds: numPages, shifts, numPlayers: np, players: [...players] };
     gamePhase = 'writing';
     broadcast({ type: 'startWriting', gameState: JSON.parse(JSON.stringify(gameState)) });
+    broadcastToSpectators();
     saveHostState();
     startWritingRound(0);
   }
@@ -1208,6 +1222,6 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.30</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.31</div>
 </body>
 </html>
