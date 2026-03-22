@@ -268,16 +268,9 @@
       <p class="text-dim mb-8" style="font-size:12px;">前のパート：</p>
       <p id="write-prev-text" style="font-size:15px;line-height:1.8;white-space:pre-wrap;"></p>
     </div>
-    <div class="mb-8" style="position:relative;">
-      <div id="write-highlight" style="
-        position:absolute; top:0; left:0; right:0; bottom:0;
-        padding:14px 18px; border:2px solid transparent; border-radius:12px;
-        font-size:16px; font-family:inherit; line-height:1.5;
-        white-space:pre-wrap; word-wrap:break-word; overflow:hidden;
-        pointer-events:none; color:transparent;
-      "></div>
-      <textarea id="write-input" class="input-field" style="min-height:180px;height:180px;line-height:1.5;white-space:pre-wrap;background:rgba(0,0,0,0.3);position:relative;z-index:1;color:#eee;" placeholder="物語の続きを書いてください..." rows="6"
-        oninput="updateCharCount()" onscroll="syncHighlightScroll()"></textarea>
+    <div class="mb-8">
+      <textarea id="write-input" class="input-field" style="min-height:180px;height:180px;line-height:1.5;white-space:pre-wrap;" placeholder="物語の続きを書いてください..." rows="6"
+        oninput="updateCharCount()"></textarea>
     </div>
     <p id="write-char" class="char-count char-ok">0 / 100</p>
     <button id="write-submit-btn" class="btn btn-primary btn-full" onclick="submitPart()">送信</button>
@@ -954,7 +947,6 @@ function startWritingRound(round) {
   }
 
   document.getElementById('write-input').value = '';
-  document.getElementById('write-highlight').innerHTML = '';
   document.getElementById('write-submitted-msg').classList.add('hidden');
   document.getElementById('write-submit-btn').textContent = '送信';
   document.getElementById('write-submit-btn').disabled = false;
@@ -980,23 +972,6 @@ function updateCharCount() {
     el.className = 'char-count ' + (len >= CHAR_LIMIT - 10 ? 'char-warn' : 'char-ok');
     btn.disabled = false;
   }
-
-  // Update highlight overlay
-  const highlight = document.getElementById('write-highlight');
-  if (len > CHAR_LIMIT) {
-    const safe = escHtml(val.slice(0, CHAR_LIMIT));
-    const over = escHtml(val.slice(CHAR_LIMIT));
-    highlight.innerHTML = '<span style="color:transparent;">' + safe + '</span><span style="background:rgba(233,69,96,0.35);color:transparent;border-radius:2px;">' + over + '</span>';
-  } else {
-    highlight.innerHTML = '';
-  }
-  syncHighlightScroll();
-}
-
-function syncHighlightScroll() {
-  const ta = document.getElementById('write-input');
-  const hl = document.getElementById('write-highlight');
-  hl.scrollTop = ta.scrollTop;
 }
 
 let roundAdvanced = false;
@@ -1265,6 +1240,6 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.33</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.34</div>
 </body>
 </html>
