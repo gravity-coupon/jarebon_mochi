@@ -1352,6 +1352,18 @@ function saveStoryAsImage() {
     backgroundColor: '#16213e',
     scale: 2,
     useCORS: true,
+    onclone: function(clonedDoc) {
+      // Force system fonts in the cloned DOM for reliable rendering
+      const clonedEl = clonedDoc.getElementById('results-story');
+      if (clonedEl) {
+        clonedEl.style.fontFamily = '"Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif';
+        clonedEl.style.letterSpacing = '0.02em';
+        // Apply to all child elements too
+        clonedEl.querySelectorAll('*').forEach(child => {
+          child.style.fontFamily = '"Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif';
+        });
+      }
+    },
   }).then(canvas => {
     const link = document.createElement('a');
     const story = gameState.stories[currentStoryView];
@@ -1427,7 +1439,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.50</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.51</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
