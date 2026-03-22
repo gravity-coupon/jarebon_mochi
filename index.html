@@ -519,14 +519,16 @@ function backToTitle() {
 }
 
 function leaveLobby() {
-  // Guest leaves the lobby before game starts
-  if (hostConn && hostConn.open) {
-    hostConn.send({ type: 'leave', playerIndex: myIndex });
-  }
-  if (peer) { peer.destroy(); peer = null; }
+  // Increment generation first so conn.on('close') is ignored
   guestConnGen++;
-  hostConn = null;
   clearGuestState();
+  // Notify host
+  if (hostConn && hostConn.open) {
+    try { hostConn.send({ type: 'leave', playerIndex: myIndex }); } catch(e) {}
+  }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  if (peer) { peer.destroy(); peer = null; }
+  hostConn = null;
   showScreen('title');
 }
 
@@ -1336,7 +1338,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.40</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.41</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
