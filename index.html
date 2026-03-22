@@ -422,6 +422,29 @@ function showRoomCopyFeedback(msg) {
   el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2000);
 }
 
+function updateRoomCodeBadge() {
+  const badge = document.getElementById('room-code-badge');
+  if (roomId && currentScreenName !== 'title' && currentScreenName !== 'join' && currentScreenName !== 'host') {
+    badge.textContent = '🔑 ' + roomId;
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function copyRoomCodeBadge() {
+  if (!roomId) return;
+  navigator.clipboard.writeText(roomId).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = roomId; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  });
+  const badge = document.getElementById('room-code-badge');
+  const orig = badge.textContent;
+  badge.textContent = '✓ コピー済み';
+  setTimeout(() => { badge.textContent = orig; }, 1500);
+}
+
 // ===================== HELPERS =====================
 function generateRoomId() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -475,9 +498,8 @@ const screens = ['title','host','join','lobby','topic','waiting','writing','resu
 let currentScreenName = 'title';
 function showScreen(name) {
   currentScreenName = name;
-  screens.forEach(s => {
-    document.getElementById('screen-' + s).classList.toggle('hidden', s !== name);
-  });
+  screens.forEach(s => document.getElementById('screen-' + s).classList.toggle('hidden', s !== name));
+  updateRoomCodeBadge();
 }
 
 function backToTitle() {
@@ -1252,6 +1274,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.37</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.38</div>
+<div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
