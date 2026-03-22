@@ -254,10 +254,11 @@
     <h2 style="font-size:20px;" class="mb-8">他のプレイヤーを待っています...</h2>
     <p class="text-dim" style="font-size:14px;"><span id="wait-done">0</span> / <span id="wait-total">0</span> 人が完了</p>
     <div class="progress-bar"><div id="wait-progress" class="progress-fill" style="width:0%;"></div></div>
+    <div id="host-abort-btn-wait" class="hidden text-center" style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="confirmAbortGame()" style="padding:8px 16px;font-size:13px;color:#e94560;border-color:#e94560;">⏹ ゲームを中断</button>
+    </div>
   </div>
 </div>
-
-<!-- ====== Writing Screen ====== -->
 <div id="screen-writing" class="screen container hidden">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-20">
@@ -283,6 +284,9 @@
         <span class="text-dim" style="font-size:13px;"><span id="write-done">0</span> / <span id="write-total">0</span> 人が完了</span>
       </div>
       <div class="progress-bar"><div id="write-progress" class="progress-fill" style="width:0%;"></div></div>
+    </div>
+    <div id="host-abort-btn" class="hidden text-center" style="margin-top:16px;">
+      <button class="btn btn-ghost" onclick="confirmAbortGame()" style="padding:8px 16px;font-size:13px;color:#e94560;border-color:#e94560;">⏹ ゲームを中断</button>
     </div>
   </div>
 </div>
@@ -983,6 +987,7 @@ function startWritingRound(round) {
   document.getElementById('write-submit-btn').disabled = false;
   updateCharCount();
   updateWriteProgress(isRestoring ? roundDone.size : 0, np);
+  document.getElementById('host-abort-btn').classList.toggle('hidden', !isHost);
   showScreen('writing');
 }
 
@@ -1075,6 +1080,7 @@ function showWaiting(done, total) {
   document.getElementById('wait-done').textContent = done;
   document.getElementById('wait-total').textContent = total;
   document.getElementById('wait-progress').style.width = (done / total * 100) + '%';
+  document.getElementById('host-abort-btn-wait').classList.toggle('hidden', !isHost);
   showScreen('waiting');
 }
 
@@ -1142,6 +1148,24 @@ function escHtml(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+// ===================== ABORT GAME =====================
+function confirmAbortGame() {
+  if (!isHost) return;
+  if (confirm('ゲームを中断しますか？\n全員の画面が結果表示に切り替わります。')) {
+    abortGame();
+  }
+}
+
+function abortGame() {
+  if (!isHost || !gameState) return;
+  gamePhase = 'results';
+  broadcast({ type: 'showResults', gameState: JSON.parse(JSON.stringify(gameState)) });
+  broadcastToSpectators();
+  saveHostState();
+  showResults();
+  document.getElementById('results-subtitle').textContent = gameState.stories.length + ' つの物語（中断）';
 }
 
 // ===================== PLAY AGAIN =====================
@@ -1274,7 +1298,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.38</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.39</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
