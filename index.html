@@ -678,8 +678,8 @@ function joinRoom(rejoinInfo) {
 
     conn.on('close', () => {
       if (myGen !== guestConnGen) return;
-      // Host disconnected — show overlay and auto-retry
-      if (currentScreenName !== 'title' && currentScreenName !== 'join') {
+      // Host disconnected — show overlay and auto-retry (but not on results/title/join)
+      if (currentScreenName !== 'title' && currentScreenName !== 'join' && currentScreenName !== 'results') {
         document.getElementById('disconnect-overlay').style.display = 'flex';
         scheduleGuestReconnect(rid, name);
       }
@@ -787,6 +787,13 @@ function handleGuestMessage(data) {
   } else if (data.type === 'showResults') {
     gameState = data.gameState;
     showResults();
+  } else if (data.type === 'gameEnd') {
+    // Host ended the game — stop reconnecting, stay on results or go to title
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    guestConnGen++;
+    clearGuestState();
+    if (peer) { peer.destroy(); peer = null; }
+    hostConn = null;
   }
 }
 
@@ -1028,15 +1035,22 @@ function escHtml(s) {
 
 // ===================== PLAY AGAIN =====================
 function playAgain() {
-  if (peer) { peer.destroy(); peer = null; }
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  guestConnGen++;
-  connections = []; hostConn = null; players = [];
-  gameState = null; topicsCollected = []; roundDone = new Set();
-  gamePhase = 'idle';
-  clearHostState();
-  clearGuestState();
-  showScreen('title');
+  // Notify guests that the game is over so they don't try to reconnect
+  if (isHost) {
+    broadcast({ type: 'gameEnd' });
+  }
+  // Small delay to let the message send before destroying peer
+  setTimeout(() => {
+    if (peer) { peer.destroy(); peer = null; }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    guestConnGen++;
+    connections = []; hostConn = null; players = [];
+    gameState = null; topicsCollected = []; roundDone = new Set();
+    gamePhase = 'idle';
+    clearHostState();
+    clearGuestState();
+    showScreen('title');
+  }, 100);
 }
 
 // ===================== COPY & SCREENSHOT =====================
@@ -1145,6 +1159,6 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.26</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.27</div>
 </body>
 </html>
