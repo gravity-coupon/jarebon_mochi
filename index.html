@@ -293,6 +293,29 @@ let roundDone = new Set();
 let myStoryIndex = -1;
 let mySubmitted = false;
 let myLastSubmittedText = "";
+let gamePhase = "idle"; // idle, lobby, topic, writing, results
+
+// ===================== HOST PERSISTENCE =====================
+const LS_KEY = 'watashibunko_host';
+
+function saveHostState() {
+  if (!isHost) return;
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      roomId, numPages, players, topicsCollected: topicsCollected || [],
+      gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
+      roundDoneList: [...roundDone], gamePhase,
+    }));
+  } catch(e) {}
+}
+
+function loadHostState() {
+  try { const s = localStorage.getItem(LS_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+}
+
+function clearHostState() {
+  try { localStorage.removeItem(LS_KEY); } catch(e) {}
+}
 
 // ===================== RANDOM TOPIC GENERATOR =====================
 const TOPIC_WHO = [
@@ -409,7 +432,30 @@ function showScreen(name) {
 function backToTitle() {
   if (peer) { peer.destroy(); peer = null; }
   connections = []; hostConn = null;
+  clearHostState();
   showScreen('title');
+}
+
+// ===================== HOST PEER SETUP =====================
+function initHostPeer(rid) {
+  if (peer && !peer.destroyed) peer.destroy();
+  peer = new Peer('watashibunko-' + rid, { debug: 0 });
+  peer.on('open', () => { console.log('Host peer open:', rid); });
+  peer.on('connection', (conn) => {
+    conn.on('open', () => {
+      conn.on('data', (data) => handleHostMessage(conn, data));
+      conn.on('close', () => { console.log('Guest disconnected:', conn._playerName); });
+    });
+  });
+  peer.on('disconnected', () => {
+    setTimeout(() => { if (peer && !peer.destroyed) peer.reconnect(); }, 2000);
+  });
+  peer.on('error', (e) => {
+    console.error('Host peer error:', e.type);
+    if (e.type === 'unavailable-id') {
+      setTimeout(() => initHostPeer(rid), 3000);
+    }
+  });
 }
 
 // ===================== HOST SETUP =====================
@@ -417,28 +463,27 @@ function showHostSetup() {
   isHost = true;
   myIndex = 0;
   roomId = generateRoomId();
+  gamePhase = 'lobby';
   document.getElementById('host-room-code').textContent = roomId;
   renderPageSelect();
   showScreen('host');
 
-  peer = new Peer('watashibunko-' + roomId, { debug: 0 });
-  peer.on('open', () => {
+  initHostPeer(roomId);
+  // Set initial player once peer is ready (or immediately if name filled)
+  const setInitialPlayer = () => {
     const name = document.getElementById('host-name').value.trim() || 'ホスト';
     players = [name];
     renderHostPlayers();
-  });
-  peer.on('connection', (conn) => {
-    conn.on('open', () => {
-      conn.on('data', (data) => handleHostMessage(conn, data));
-    });
-    connections.push(conn);
-  });
-  peer.on('error', (e) => console.error('Peer error', e));
+    saveHostState();
+  };
+  if (peer) peer.on('open', setInitialPlayer);
+  else setInitialPlayer();
 
   document.getElementById('host-name').addEventListener('input', () => {
     const name = document.getElementById('host-name').value.trim() || 'ホスト';
     players[0] = name;
     renderHostPlayers();
+    saveHostState();
   });
 }
 
@@ -484,12 +529,36 @@ function renderLobbyPlayers() {
 // ===================== HOST MESSAGE HANDLER =====================
 function handleHostMessage(conn, data) {
   if (data.type === 'join') {
+    // Check if this is a rejoin (same name as existing player)
+    const existingIdx = players.indexOf(data.name);
+    if (existingIdx >= 1 && gamePhase !== 'lobby') {
+      // Rejoin: replace connection for this player
+      conn._playerIndex = existingIdx;
+      conn._playerName = data.name;
+      connections = connections.filter(c => c._playerIndex !== existingIdx);
+      connections.push(conn);
+      // Send full state for recovery
+      conn.send({
+        type: 'rejoinState',
+        playerIndex: existingIdx,
+        players: [...players],
+        gamePhase,
+        gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
+        roundDoneList: [...roundDone],
+        playerAlreadySubmitted: roundDone.has(existingIdx),
+      });
+      return;
+    }
+    // Normal new join
     players.push(data.name);
     conn._playerIndex = players.length - 1;
     conn._playerName = data.name;
+    connections = connections.filter(c => c._playerIndex !== conn._playerIndex);
+    connections.push(conn);
     conn.send({ type: 'joined', playerIndex: conn._playerIndex, players: [...players] });
     broadcast({ type: 'playerList', players: [...players] }, conn);
     renderHostPlayers();
+    saveHostState();
   } else if (data.type === 'topicSubmit') {
     handleTopicFromPlayer(conn._playerIndex, data.topic);
   } else if (data.type === 'partSubmit') {
@@ -549,6 +618,32 @@ function handleGuestMessage(data) {
     players = data.players;
     renderLobbyPlayers();
     showScreen('lobby');
+
+  } else if (data.type === 'rejoinState') {
+    // Recovering after rejoin
+    myIndex = data.playerIndex;
+    players = data.players;
+    gameState = data.gameState;
+    roundDone = new Set(data.roundDoneList || []);
+    const phase = data.gamePhase;
+
+    if (phase === 'lobby') {
+      renderLobbyPlayers();
+      showScreen('lobby');
+    } else if (phase === 'topic') {
+      showScreen('topic');
+    } else if (phase === 'writing' && gameState) {
+      startWritingRound(gameState.currentRound);
+      if (data.playerAlreadySubmitted) {
+        mySubmitted = true;
+        document.getElementById('write-submitted-msg').classList.remove('hidden');
+        document.getElementById('write-submit-btn').textContent = '再提出';
+      }
+      updateWriteProgress(roundDone.size, gameState.numPlayers);
+    } else if (phase === 'results' && gameState) {
+      showResults();
+    }
+
   } else if (data.type === 'playerList') {
     players = data.players;
     renderLobbyPlayers();
@@ -573,8 +668,10 @@ function handleGuestMessage(data) {
 // ===================== GAME START =====================
 function startGame() {
   topicsCollected = new Array(players.length);
+  gamePhase = 'topic';
   showScreen('topic');
   broadcast({ type: 'startTopicPhase' });
+  saveHostState();
 }
 
 // ===================== TOPIC =====================
@@ -610,7 +707,9 @@ function handleTopicFromPlayer(pIdx, topic) {
     const shifts = generateRotation(np, numPages);
     const stories = topicsCollected.map((t, i) => ({ title: t, parts: [], originalPlayerIndex: i }));
     gameState = { stories, currentRound: 0, totalRounds: numPages, shifts, numPlayers: np, players: [...players] };
+    gamePhase = 'writing';
     broadcast({ type: 'startWriting', gameState: JSON.parse(JSON.stringify(gameState)) });
+    saveHostState();
     startWritingRound(0);
   }
 }
@@ -695,17 +794,22 @@ function handlePartFromPlayer(pIdx, storyIndex, round, text, isResubmit) {
 
   broadcast({ type: 'roundProgress', count: doneCount });
   updateWriteProgress(doneCount, gameState.numPlayers);
+  saveHostState();
 
   if (doneCount === gameState.numPlayers) {
     roundAdvanced = true;
     const next = gameState.currentRound + 1;
     if (next >= gameState.totalRounds) {
+      gamePhase = 'results';
       broadcast({ type: 'showResults', gameState: JSON.parse(JSON.stringify(gameState)) });
+      saveHostState();
       showResults();
     } else {
       gameState.currentRound = next;
       roundDone = new Set();
+      gamePhase = 'writing';
       broadcast({ type: 'nextRound', gameState: JSON.parse(JSON.stringify(gameState)) });
+      saveHostState();
       startWritingRound(next);
     }
   }
@@ -790,6 +894,8 @@ function playAgain() {
   if (peer) { peer.destroy(); peer = null; }
   connections = []; hostConn = null; players = [];
   gameState = null; topicsCollected = []; roundDone = new Set();
+  gamePhase = 'idle';
+  clearHostState();
   showScreen('title');
 }
 
@@ -845,7 +951,45 @@ function showCopyFeedback(msg) {
   clearTimeout(el._timer);
   el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
+
+// ===================== HOST AUTO-RESTORE ON LOAD =====================
+window.addEventListener('load', () => {
+  const saved = loadHostState();
+  if (!saved || saved.gamePhase === 'idle') return;
+
+  isHost = true;
+  myIndex = 0;
+  roomId = saved.roomId;
+  numPages = saved.numPages;
+  players = saved.players || [];
+  topicsCollected = saved.topicsCollected || [];
+  gameState = saved.gameState;
+  roundDone = new Set(saved.roundDoneList || []);
+  gamePhase = saved.gamePhase;
+
+  // Reconnect peer with same room ID so guests can rejoin
+  initHostPeer(roomId);
+
+  if (gamePhase === 'lobby') {
+    document.getElementById('host-room-code').textContent = roomId;
+    document.getElementById('host-name').value = players[0] || '';
+    renderPageSelect();
+    renderHostPlayers();
+    showScreen('host');
+    document.getElementById('host-name').addEventListener('input', () => {
+      players[0] = document.getElementById('host-name').value.trim() || 'ホスト';
+      renderHostPlayers(); saveHostState();
+    });
+  } else if (gamePhase === 'topic') {
+    initHostPeer(roomId);
+    showScreen('topic');
+  } else if (gamePhase === 'writing' && gameState) {
+    startWritingRound(gameState.currentRound);
+  } else if (gamePhase === 'results' && gameState) {
+    showResults();
+  }
+});
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.16</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.17</div>
 </body>
 </html>
