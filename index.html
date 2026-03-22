@@ -150,7 +150,7 @@
     <p class="text-dim" style="font-size:14px;margin-bottom:20px;line-height:1.6;">
       自動で再接続を試みています。<br>しばらくお待ちください。
     </p>
-    <button class="btn btn-ghost" onclick="dismissDisconnect()" style="font-size:13px;padding:10px 20px;">諦めてタイトルに戻る</button>
+    <button id="dismiss-btn" class="btn btn-ghost" onclick="dismissDisconnect()" disabled style="font-size:13px;padding:10px 20px;">諦めてタイトルに戻る（6）</button>
   </div>
 </div>
 
@@ -544,7 +544,7 @@ function backToTitle() {
   clearHostState();
   clearGuestState();
   clearFinishedGame();
-  document.getElementById('disconnect-overlay').style.display = 'none';
+  hideDisconnectOverlay();
   showScreen('title');
 }
 
@@ -562,8 +562,36 @@ function leaveLobby() {
   showScreen('title');
 }
 
-function dismissDisconnect() {
+let dismissCountdownTimer = null;
+
+function showDisconnectOverlay() {
+  document.getElementById('disconnect-overlay').style.display = 'flex';
+  // Start countdown for dismiss button
+  const btn = document.getElementById('dismiss-btn');
+  btn.disabled = true;
+  let remaining = 6;
+  btn.textContent = '諦めてタイトルに戻る（' + remaining + '）';
+  if (dismissCountdownTimer) clearInterval(dismissCountdownTimer);
+  dismissCountdownTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(dismissCountdownTimer);
+      dismissCountdownTimer = null;
+      btn.textContent = '諦めてタイトルに戻る';
+      btn.disabled = false;
+    } else {
+      btn.textContent = '諦めてタイトルに戻る（' + remaining + '）';
+    }
+  }, 1000);
+}
+
+function hideDisconnectOverlay() {
   document.getElementById('disconnect-overlay').style.display = 'none';
+  if (dismissCountdownTimer) { clearInterval(dismissCountdownTimer); dismissCountdownTimer = null; }
+}
+
+function dismissDisconnect() {
+  hideDisconnectOverlay();
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   guestConnGen++;
   isSpectator = false;
@@ -824,7 +852,7 @@ function joinRoom(rejoinInfo) {
       const shouldReconnect = currentScreenName !== 'title' && currentScreenName !== 'join'
         && (currentScreenName !== 'results' || isSpectator);
       if (shouldReconnect) {
-        document.getElementById('disconnect-overlay').style.display = 'flex';
+        showDisconnectOverlay();
         scheduleGuestReconnect(rid, name);
       }
     });
@@ -901,7 +929,7 @@ function handleGuestMessage(data) {
     document.getElementById('lobby-title').textContent = '参加しました！';
     document.getElementById('lobby-subtitle').textContent = 'ホストがゲームを開始するのを待っています...';
     renderLobbyPlayers();
-    document.getElementById('disconnect-overlay').style.display = 'none';
+    hideDisconnectOverlay();
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     showScreen('lobby');
     saveGuestState();
@@ -913,7 +941,7 @@ function handleGuestMessage(data) {
     gameState = data.gameState;
     roundDone = new Set(data.roundDoneList || []);
     const phase = data.gamePhase;
-    document.getElementById('disconnect-overlay').style.display = 'none';
+    hideDisconnectOverlay();
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     saveGuestState();
 
@@ -977,7 +1005,7 @@ function handleGuestMessage(data) {
     // Spectator mode — show current stories or waiting message
     isSpectator = true;
     gameState = data.gameState;
-    document.getElementById('disconnect-overlay').style.display = 'none';
+    hideDisconnectOverlay();
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     saveGuestState();
     if (gameState) {
@@ -1451,7 +1479,7 @@ window.addEventListener('load', () => {
     // Auto-reconnect to host (works for both players and spectators)
     isSpectator = guestSaved.isSpectator || false;
     spectatorName = guestSaved.playerName;
-    document.getElementById('disconnect-overlay').style.display = 'flex';
+    showDisconnectOverlay();
     joinRoom({ roomId: guestSaved.roomId, playerName: guestSaved.playerName });
     return;
   }
@@ -1464,7 +1492,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.54</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.55</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
