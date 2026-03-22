@@ -163,7 +163,22 @@
     <button class="btn btn-primary" onclick="showHostSetup()">部屋をつくる</button>
     <button class="btn btn-secondary" onclick="showJoin()">部屋に参加する</button>
   </div>
-  <p class="text-dim" style="font-size:13px;margin-top:40px;line-height:1.6;">
+
+  <details style="margin-top:32px;text-align:left;">
+    <summary style="cursor:pointer;color:#f0c040;font-size:15px;font-weight:700;text-align:center;list-style:none;">
+      ▶ 遊び方
+    </summary>
+    <div class="card" style="margin-top:12px;padding:20px 24px;font-size:14px;line-height:2;color:#ccc;">
+      <p style="font-weight:700;color:#f0c040;margin-bottom:4px;">📖 ゲームの流れ</p>
+      <p>各プレイヤーが物語のタイトルを決め、リレー形式で物語を書いていきます。書くときに見えるのは直前のパートだけ。全ラウンド終了後、完成した物語をみんなで読み返して楽しみます。</p>
+      <p style="font-weight:700;color:#4ecdc4;margin-top:12px;margin-bottom:4px;">🎮 始め方</p>
+      <p>1人が「部屋をつくる」でホストになり、表示されるルームコードを共有します。他のプレイヤーは「部屋に参加する」からコードを入力して参加します。全員揃ったらホストがゲーム開始。</p>
+      <p style="font-weight:700;color:#ff6b81;margin-top:12px;margin-bottom:4px;">👀 観戦モード</p>
+      <p>ゲーム開始後にルームコードで参加すると、観戦者として物語の進行をリアルタイムで見ることができます。</p>
+    </div>
+  </details>
+
+  <p class="text-dim" style="font-size:13px;margin-top:24px;line-height:1.6;">
     PeerJSを利用したP2P通信で動作します。<br>サーバーは使わず、ブラウザだけで完結します。
   </p>
   <div style="margin-top:32px;padding-top:20px;border-top:1px solid #2a3a5e;">
@@ -1492,7 +1507,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.55</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.56</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
