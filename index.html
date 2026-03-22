@@ -266,7 +266,7 @@
     </div>
     <div id="write-prev" class="prev-text-box hidden">
       <p class="text-dim mb-8" style="font-size:12px;">前のパート：</p>
-      <p id="write-prev-text" style="font-size:15px;line-height:1.8;"></p>
+      <p id="write-prev-text" style="font-size:15px;line-height:1.8;white-space:pre-wrap;"></p>
     </div>
     <div class="mb-8">
       <textarea id="write-input" class="input-field" style="min-height:180px;height:180px;" placeholder="物語の続きを書いてください..." maxlength="100" rows="6"
@@ -1069,7 +1069,7 @@ function renderStory(idx) {
     const color = getPlayerColor(part.author);
     html += '<div class="part-block" style="border-left:3px solid ' + color + ';">';
     html += '<p style="font-size:12px;margin-bottom:4px;"><span style="color:' + color + ';font-weight:700;">' + escHtml(part.author) + '</span> <span style="color:#8899aa;">— ページ ' + (i + 1) + '</span></p>';
-    html += '<p style="font-size:16px;line-height:1.8;">' + escHtml(part.text) + '</p>';
+    html += '<p style="font-size:16px;line-height:1.8;white-space:pre-wrap;">' + escHtml(part.text) + '</p>';
     html += '</div>';
   });
   document.getElementById('results-story').innerHTML = html;
@@ -1208,6 +1208,6 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.29</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.30</div>
 </body>
 </html>
