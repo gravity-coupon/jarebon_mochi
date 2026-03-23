@@ -316,7 +316,15 @@
     <div id="results-story" class="card"></div>
   </div>
   <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap;">
-    <button class="btn btn-secondary" onclick="copyStoryAsText()" style="padding:10px 20px;font-size:14px;">📋 テキストをコピー</button>
+    <div style="position:relative;display:inline-block;">
+      <button class="btn btn-secondary" onclick="toggleCopyMenu()" style="padding:10px 20px;font-size:14px;">📋 テキストをコピー ▾</button>
+      <div id="copy-menu" style="display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;background:#16213e;border:1px solid #2a3a5e;border-radius:10px;padding:6px 0;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:10;">
+        <button onclick="copyStoryAsText('detail'); hideCopyMenu();" style="display:block;width:100%;padding:10px 16px;background:none;border:none;color:#eee;font-size:14px;font-family:inherit;text-align:left;cursor:pointer;"
+          onmouseover="this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.background='none'">📝 著者情報つき</button>
+        <button onclick="copyStoryAsText('simple'); hideCopyMenu();" style="display:block;width:100%;padding:10px 16px;background:none;border:none;color:#eee;font-size:14px;font-family:inherit;text-align:left;cursor:pointer;"
+          onmouseover="this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.background='none'">📄 本文のみ</button>
+      </div>
+    </div>
     <button class="btn btn-secondary" onclick="saveStoryAsImage()" style="padding:10px 20px;font-size:14px;">📸 画像として保存</button>
   </div>
   <p id="copy-feedback" class="text-center" style="font-size:13px;margin-top:8px;color:#4ecdc4;opacity:0;transition:opacity 0.3s;"></p>
@@ -1392,17 +1400,44 @@ function playAgain() {
 }
 
 // ===================== COPY & SCREENSHOT =====================
-function copyStoryAsText() {
+function toggleCopyMenu() {
+  const menu = document.getElementById('copy-menu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function hideCopyMenu() {
+  document.getElementById('copy-menu').style.display = 'none';
+}
+
+// Close menu when clicking elsewhere
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('copy-menu');
+  if (menu && menu.style.display === 'block' && !e.target.closest('#copy-menu') && !e.target.closest('[onclick*="toggleCopyMenu"]')) {
+    menu.style.display = 'none';
+  }
+});
+
+function copyStoryAsText(mode) {
   const story = gameState.stories[currentStoryView];
-  let text = '📖 じゃれ本（餅天）\n';
-  text += '━━━━━━━━━━━━━━━━\n';
-  text += '「' + story.title + '」\n';
-  text += '━━━━━━━━━━━━━━━━\n\n';
-  story.parts.forEach((part, i) => {
-    text += '【ページ ' + (i + 1) + '】' + part.author + '\n';
-    text += part.text + '\n\n';
-  });
-  text += '━━━━━━━━━━━━━━━━';
+  let text = '';
+
+  if (mode === 'simple') {
+    text += '「' + story.title + '」\n\n';
+    story.parts.forEach((part) => {
+      text += part.text + '\n\n';
+    });
+    text = text.trimEnd();
+  } else {
+    text += '📖 じゃれ本（餅天）\n';
+    text += '━━━━━━━━━━━━━━━━\n';
+    text += '「' + story.title + '」\n';
+    text += '━━━━━━━━━━━━━━━━\n\n';
+    story.parts.forEach((part, i) => {
+      text += '【ページ ' + (i + 1) + '】' + part.author + '\n';
+      text += part.text + '\n\n';
+    });
+    text += '━━━━━━━━━━━━━━━━';
+  }
 
   navigator.clipboard.writeText(text).then(() => {
     showCopyFeedback('テキストをコピーしました！');
@@ -1507,7 +1542,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.56</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.57</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
