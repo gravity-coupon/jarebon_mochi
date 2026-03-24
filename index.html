@@ -895,7 +895,7 @@ function resetHeartbeatTimeout(rid, name) {
   heartbeatTimeout = setTimeout(() => {
     // No ping from host for 15 seconds — connection is likely dead
     if (currentScreenName !== 'title' && currentScreenName !== 'join' && currentScreenName !== 'results') {
-      console.log('Heartbeat timeout — reconnecting...');
+      dbg('GUEST heartbeat timeout, reconnecting');
       showDisconnectOverlay();
       if (hostConn) { try { hostConn.close(); } catch(e) {} }
       scheduleGuestReconnect(rid, name);
@@ -913,20 +913,24 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (!isHost || gamePhase === 'idle' || gamePhase === 'lobby') return;
   // Host just came back to foreground — check peer health
-  console.log('Host returned to foreground, checking connections...');
+  dbg('HOST visibilitychange: returned to foreground');
   setTimeout(() => {
     if (!peer || peer.destroyed) {
       // Peer is dead, recreate
-      console.log('Host peer dead after background, recreating...');
+      dbg('HOST peer dead, recreating');
       initHostPeer(roomId);
       return;
     }
     if (peer.disconnected && !peer.open) {
-      console.log('Host peer disconnected after background, recreating...');
+      dbg('HOST peer disconnected, recreating');
       initHostPeer(roomId);
       return;
     }
+    dbg('HOST vischeck: peer=' + (peer ? (peer.destroyed ? 'destroyed' : (peer.disconnected ? 'disconnected' : (peer.open ? 'open' : 'other'))) : 'null') + ' conns=' + connections.length);
     // Peer looks alive — try to reconnect to dead guest connections
+    const deadConns = connections.filter(c => !c.open);
+    const aliveConns = connections.filter(c => c.open);
+    dbg('HOST alive=' + aliveConns.length + ' dead=' + deadConns.length + ' withPeerId=' + connections.filter(c => c._guestPeerId).length);
     // Send a test ping first to flush dead connections
     try { broadcast({ type: 'ping' }); } catch(e) {}
     // Wait a moment for close events to fire, then reconnect
@@ -939,7 +943,7 @@ function initHostPeer(rid) {
   if (peer && !peer.destroyed) peer.destroy();
   peer = new Peer('watashibunko-' + rid, { debug: 0 });
   peer.on('open', () => {
-    console.log('Host peer open:', rid);
+    dbg('HOST peer.open rid=' + rid);
     // After reconnect, actively reach out to guests with dead connections
     if (gamePhase !== 'idle' && gamePhase !== 'lobby') {
       setTimeout(() => reconnectToGuests(), 1000);
@@ -948,7 +952,7 @@ function initHostPeer(rid) {
   peer.on('connection', (conn) => {
     conn.on('open', () => {
       conn.on('data', (data) => handleHostMessage(conn, data));
-      conn.on('close', () => { console.log('Guest disconnected:', conn._playerName); });
+      conn.on('close', () => { dbg('HOST conn.close: ' + conn._playerName); });
     });
   });
   peer.on('disconnected', () => {
@@ -956,13 +960,13 @@ function initHostPeer(rid) {
     try { peer.reconnect(); } catch(e) {}
     setTimeout(() => {
       if (peer && !peer.destroyed && peer.disconnected && !peer.open) {
-        console.log('Host peer reconnect failed, recreating...');
+        dbg('HOST reconnect failed, recreating');
         initHostPeer(rid);
       }
     }, 5000);
   });
   peer.on('error', (e) => {
-    console.error('Host peer error:', e.type);
+    dbg('HOST peer.error: ' + e.type);
     if (e.type === 'unavailable-id') {
       setTimeout(() => initHostPeer(rid), 3000);
     } else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error') {
@@ -974,13 +978,18 @@ function initHostPeer(rid) {
 }
 
 function reconnectToGuests() {
-  if (!isHost || !peer || peer.destroyed || !peer.open) return;
+  if (!isHost || !peer || peer.destroyed || !peer.open) {
+    dbg('HOST reconnectToGuests: skip (host=' + isHost + ' peer=' + (peer ? (peer.open ? 'open' : 'not-open') : 'null') + ')');
+    return;
+  }
+  let tried = 0;
   connections.forEach(oldConn => {
     const guestPeerId = oldConn._guestPeerId;
     const pIdx = oldConn._playerIndex;
     const pName = oldConn._playerName;
-    if (!guestPeerId || oldConn.open) return; // skip alive connections or those without peer ID
-    console.log('Host reconnecting to guest:', pName, guestPeerId);
+    if (!guestPeerId || oldConn.open) return;
+    tried++;
+    dbg('HOST reconnectToGuest: ' + pName + ' pid=' + guestPeerId);
     try {
       const newConn = peer.connect(guestPeerId);
       newConn._playerIndex = pIdx;
@@ -991,7 +1000,7 @@ function reconnectToGuests() {
         connections = connections.filter(c => c._playerIndex !== pIdx);
         connections.push(newConn);
         newConn.on('data', (data) => handleHostMessage(newConn, data));
-        newConn.on('close', () => { console.log('Guest disconnected (reverse):', pName); });
+        newConn.on('close', () => { dbg('HOST reverse conn.close: ' + pName); });
         // Send rejoinState so guest can recover
         newConn.send({
           type: 'rejoinState',
@@ -1006,7 +1015,7 @@ function reconnectToGuests() {
         });
       });
       newConn.on('error', () => {
-        console.log('Host reverse connect failed for:', pName);
+        dbg('HOST reverse connect FAILED: ' + pName);
       });
     } catch(e) {}
   });
@@ -1245,7 +1254,7 @@ function joinRoom(rejoinInfo) {
         reverseConn.on('data', (d) => {
           if (myGen2 !== guestConnGen) return;
           if (d.type === 'rejoinState' && d.isReverseConnection) {
-            console.log('Host reverse-connected to us, accepting...');
+            dbg('GUEST reverse conn accepted!');
             hostConn = reverseConn;
             handleGuestMessage(d);
           } else {
@@ -1357,15 +1366,15 @@ const MAX_RECONNECT_ATTEMPTS = 20;
 
 function scheduleGuestReconnect(rid, name) {
   if (reconnectTimer) clearTimeout(reconnectTimer);
-  // Always use the most reliable source for name
   const reliableName = name || (function() {
     try {
       const gs = JSON.parse(localStorage.getItem('watashibunko_guest') || '{}');
       return gs.playerName || '';
     } catch(e) { return ''; }
   })();
-  if (!reliableName || !rid) return; // can't reconnect without name/room
+  if (!reliableName || !rid) { dbg('GUEST reconnect: no name/rid, abort'); return; }
   guestReconnectAttempt++;
+  dbg('GUEST reconnect attempt=' + guestReconnectAttempt + '/' + MAX_RECONNECT_ATTEMPTS + ' peer=' + (peer ? (peer.open ? 'open:' + peer.id : 'not-open') : 'null'));
   if (guestReconnectAttempt > MAX_RECONNECT_ATTEMPTS) {
     hideDisconnectOverlay();
     guestConnGen++;
@@ -2182,7 +2191,31 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.92</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.93-dbg</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
+<div id="debug-log" style="position:fixed;top:0;right:0;width:320px;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;font-family:monospace;padding:4px 6px;z-index:9999;pointer-events:auto;display:none;white-space:pre-wrap;word-break:break-all;"></div>
+<script>
+const _dbgEl = document.getElementById('debug-log');
+let _dbgOn = false;
+function dbg(msg) {
+  console.log('[DBG]', msg);
+  if (!_dbgOn) return;
+  const t = new Date().toLocaleTimeString('ja-JP',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  _dbgEl.textContent = t + ' ' + msg + '\n' + _dbgEl.textContent.slice(0, 3000);
+}
+// Triple-tap version number to toggle debug overlay
+let _tapCount = 0, _tapTimer = null;
+document.querySelector('[style*="v1.93"]').addEventListener('click', () => {
+  _tapCount++;
+  if (_tapTimer) clearTimeout(_tapTimer);
+  _tapTimer = setTimeout(() => { _tapCount = 0; }, 600);
+  if (_tapCount >= 3) {
+    _tapCount = 0;
+    _dbgOn = !_dbgOn;
+    _dbgEl.style.display = _dbgOn ? 'block' : 'none';
+    if (_dbgOn) dbg('Debug ON | role=' + (isHost?'HOST':'GUEST') + ' phase=' + gamePhase + ' players=' + JSON.stringify(players));
+  }
+});
+</script>
 </body>
 </html>
