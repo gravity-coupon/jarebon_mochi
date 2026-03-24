@@ -272,6 +272,7 @@
     <h2 style="font-size:20px;" class="mb-8">他のプレイヤーを待っています...</h2>
     <p class="text-dim" style="font-size:14px;"><span id="wait-done">0</span> / <span id="wait-total">0</span> 人が完了</p>
     <div class="progress-bar"><div id="wait-progress" class="progress-fill" style="width:0%;"></div></div>
+    <div id="host-topic-status" class="hidden" style="margin-top:16px;text-align:left;"></div>
     <div id="host-abort-btn-wait" class="hidden text-center" style="margin-top:16px;">
       <button class="btn btn-ghost" onclick="confirmAbortGame()" style="padding:8px 16px;font-size:13px;color:#e94560;border-color:#e94560;">⏹ ゲームを中断</button>
     </div>
@@ -303,6 +304,7 @@
       </div>
       <div class="progress-bar"><div id="write-progress" class="progress-fill" style="width:0%;"></div></div>
     </div>
+    <div id="host-write-status" class="hidden" style="margin-top:12px;"></div>
     <div id="host-abort-btn" class="hidden text-center" style="margin-top:16px;">
       <button class="btn btn-ghost" onclick="confirmAbortGame()" style="padding:8px 16px;font-size:13px;color:#e94560;border-color:#e94560;">⏹ ゲームを中断</button>
     </div>
@@ -1248,6 +1250,7 @@ function handleTopicFromPlayer(pIdx, topic) {
   const count = topicsCollected.filter(t => t != null && t !== '').length;
   broadcast({ type: 'topicProgress', count: count, total: players.length });
   updateWaiting(count, players.length);
+  renderHostTopicStatus();
   saveHostState();
   if (count === players.length) {
     topicsComplete = true;
@@ -1423,6 +1426,7 @@ function showWaiting(done, total) {
   document.getElementById('wait-total').textContent = total;
   document.getElementById('wait-progress').style.width = (done / total * 100) + '%';
   document.getElementById('host-abort-btn-wait').classList.toggle('hidden', !isHost);
+  renderHostTopicStatus();
   showScreen('waiting');
 }
 
@@ -1436,6 +1440,39 @@ function updateWriteProgress(done, total) {
   document.getElementById('write-done').textContent = done;
   document.getElementById('write-total').textContent = total;
   document.getElementById('write-progress').style.width = (done / total * 100) + '%';
+  if (isHost) renderHostWriteStatus();
+}
+
+// ===================== HOST-ONLY STATUS =====================
+function renderHostTopicStatus() {
+  const el = document.getElementById('host-topic-status');
+  if (!isHost) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  let html = '<p style="font-size:12px;color:#8899aa;margin-bottom:6px;font-family:\'Noto Sans JP\',sans-serif;">提出状況：</p><div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  players.forEach((p, i) => {
+    const done = topicsCollected[i] != null && topicsCollected[i] !== '';
+    const color = done ? '#4ecdc4' : '#555';
+    const icon = done ? '✓' : '…';
+    html += '<span style="font-size:12px;padding:3px 8px;border-radius:12px;background:' + (done ? 'rgba(78,205,196,0.15)' : 'rgba(255,255,255,0.05)') + ';color:' + color + ';font-family:\'Noto Sans JP\',sans-serif;">' + icon + ' ' + escHtml(p) + '</span>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderHostWriteStatus() {
+  const el = document.getElementById('host-write-status');
+  if (!isHost || !gameState) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  let html = '<p style="font-size:12px;color:#8899aa;margin-bottom:6px;font-family:\'Noto Sans JP\',sans-serif;">提出状況：</p><div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  for (let i = 0; i < gameState.numPlayers; i++) {
+    const p = players[i] || gameState.players[i] || ('Player ' + i);
+    const done = roundDone.has(i);
+    const color = done ? '#4ecdc4' : '#555';
+    const icon = done ? '✓' : '…';
+    html += '<span style="font-size:12px;padding:3px 8px;border-radius:12px;background:' + (done ? 'rgba(78,205,196,0.15)' : 'rgba(255,255,255,0.05)') + ';color:' + color + ';font-family:\'Noto Sans JP\',sans-serif;">' + icon + ' ' + escHtml(p) + '</span>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 // ===================== RESULTS =====================
@@ -1702,7 +1739,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.72</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.73</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
