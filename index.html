@@ -664,6 +664,7 @@ function backToTitle() {
   clearGuestState();
   clearFinishedGame();
   try { sessionStorage.removeItem('watashibunko_token'); } catch(e) {}
+  clearDraft();
   hideDisconnectOverlay();
   showScreen('title');
 }
@@ -1513,6 +1514,7 @@ function playAgain() {
     clearGuestState();
     clearFinishedGame();
     try { sessionStorage.removeItem('watashibunko_token'); } catch(e) {}
+    clearDraft();
     showScreen('title');
   }, 100);
 }
@@ -1661,7 +1663,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.63</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.64</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
