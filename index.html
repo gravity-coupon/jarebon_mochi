@@ -1021,6 +1021,8 @@ function reconnectToGuests() {
           roundDoneList: [...roundDone],
           playerAlreadySubmitted: roundDone.has(pIdx),
           topicAlreadySubmitted: topicsCollected[pIdx] != null && topicsCollected[pIdx] !== '',
+          topicsDone: topicsCollected.filter(t => t != null && t !== '').length,
+          topicsTotal: topicsCollected.length,
           isReverseConnection: true,
         });
       });
@@ -1125,6 +1127,8 @@ function handleHostMessage(conn, data) {
         roundDoneList: [...roundDone],
         playerAlreadySubmitted: roundDone.has(existingIdx),
         topicAlreadySubmitted: topicsCollected[existingIdx] != null && topicsCollected[existingIdx] !== '',
+        topicsDone: topicsCollected.filter(t => t != null && t !== '').length,
+        topicsTotal: topicsCollected.length,
       });
       return;
     }
@@ -1447,18 +1451,18 @@ function handleGuestMessage(data) {
       showScreen('lobby');
     } else if (phase === 'topic') {
       if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
-      // Check if we submitted a topic locally but host didn't receive it
+      const topicCount = data.topicsDone || 0;
+      const topicTotal = data.topicsTotal || players.length;
       if (!data.topicAlreadySubmitted) {
         const savedTopic = (function() { try { return sessionStorage.getItem('watashibunko_topic') || ''; } catch(e) { return ''; } })();
         if (savedTopic) {
-          // Auto-resend the topic
           hostConn.send({ type: 'topicSubmit', topic: savedTopic });
-          showWaiting(0, players.length);
+          showWaiting(topicCount, topicTotal);
         } else {
           showScreen('topic');
         }
       } else {
-        showWaiting(0, players.length);
+        showWaiting(topicCount, topicTotal);
       }
     } else if (phase === 'writing' && gameState) {
       if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
