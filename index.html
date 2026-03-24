@@ -163,7 +163,10 @@
   <p class="text-dim mb-32" style="font-size:16px;line-height:1.8;">みんなで繋ぐ即興リレー小説ゲーム</p>
   <div class="flex-col">
     <button class="btn btn-primary" onclick="showHostSetup()">部屋をつくる</button>
-    <button class="btn btn-secondary" onclick="showJoin()">部屋に参加する</button>
+    <div style="display:flex;gap:8px;align-items:stretch;">
+      <button class="btn btn-secondary" onclick="showJoin()" style="flex:1;">部屋に参加する</button>
+      <button id="rejoin-btn" class="btn btn-ghost" onclick="rejoinLastRoom()" style="display:none;padding:14px 14px;font-size:12px;white-space:nowrap;font-family:'Noto Sans JP',sans-serif;" title="前回のルームに再入室"></button>
+    </div>
   </div>
 
   <details style="margin-top:32px;text-align:left;">
@@ -789,6 +792,7 @@ function showScreen(name) {
   currentScreenName = name;
   screens.forEach(s => document.getElementById('screen-' + s).classList.toggle('hidden', s !== name));
   updateRoomCodeBadge();
+  if (name === 'title') updateRejoinButton();
 }
 
 function backToTitle() {
@@ -1224,6 +1228,34 @@ function broadcastToSpectators() {
 }
 
 // ===================== JOIN =====================
+const LS_LASTROOM = 'watashibunko_lastroom';
+
+function saveLastRoom(rid, name) {
+  try { localStorage.setItem(LS_LASTROOM, JSON.stringify({ roomId: rid, playerName: name })); } catch(e) {}
+}
+
+function loadLastRoom() {
+  try { const s = localStorage.getItem(LS_LASTROOM); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+}
+
+function updateRejoinButton() {
+  const btn = document.getElementById('rejoin-btn');
+  const last = loadLastRoom();
+  if (last && last.roomId && last.playerName) {
+    btn.textContent = '🔄 ' + last.roomId;
+    btn.style.display = 'block';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+function rejoinLastRoom() {
+  const last = loadLastRoom();
+  if (!last || !last.roomId || !last.playerName) return;
+  roomId = last.roomId;
+  joinRoom({ roomId: last.roomId, playerName: last.playerName });
+}
+
 function showJoin() {
   isHost = false;
   showScreen('join');
@@ -1428,6 +1460,7 @@ function handleGuestMessage(data) {
     myIndex = data.playerIndex;
     players = data.players;
     if (data.token) { try { sessionStorage.setItem('watashibunko_token', data.token); } catch(e) {} }
+    saveLastRoom(roomId, players[myIndex]);
     document.getElementById('lobby-title').textContent = '参加しました！';
     document.getElementById('lobby-subtitle').textContent = 'ホストがゲームを開始するのを待っています...';
     renderLobbyPlayers();
@@ -1454,6 +1487,7 @@ function handleGuestMessage(data) {
     hideDisconnectOverlay();
     resetReconnectAttempts();
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    saveLastRoom(roomId, players[myIndex]);
     saveGuestState();
 
     if (phase === 'lobby') {
@@ -2244,10 +2278,14 @@ window.addEventListener('load', () => {
   if (finishedSaved && finishedSaved.gameState) {
     gameState = finishedSaved.gameState;
     showResults();
+    return;
   }
+
+  // On title screen — update rejoin button
+  updateRejoinButton();
 });
 </script>
-<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.97</div>
+<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.98</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 <div id="debug-log" style="position:fixed;top:0;right:0;width:320px;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;font-family:monospace;padding:4px 6px;z-index:9999;pointer-events:auto;display:none;white-space:pre-wrap;word-break:break-all;"></div>
 <script>
