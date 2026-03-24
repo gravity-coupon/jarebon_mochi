@@ -1381,7 +1381,7 @@ function submitTopic() {
     topicsComplete = false;
     handleTopicFromPlayer(0, topic);
     if (!topicsComplete) {
-      showWaiting(topicsCollected.filter(t => t != null && t !== '').length, players.length);
+      showWaiting(topicsCollected.filter(t => t != null && t !== '').length, topicsCollected.length);
     }
   } else {
     hostConn.send({ type: 'topicSubmit', topic });
@@ -1392,13 +1392,14 @@ function submitTopic() {
 function handleTopicFromPlayer(pIdx, topic) {
   topicsCollected[pIdx] = topic;
   const count = topicsCollected.filter(t => t != null && t !== '').length;
-  broadcast({ type: 'topicProgress', count: count, total: players.length });
-  updateWaiting(count, players.length);
+  const total = topicsCollected.length; // use original array length, not current players.length
+  broadcast({ type: 'topicProgress', count: count, total: total });
+  updateWaiting(count, total);
   renderHostTopicStatus();
   saveHostState();
-  if (count === players.length) {
+  if (count === total) {
     topicsComplete = true;
-    const np = players.length;
+    const np = total;
     const shifts = generateRotation(np, numPages);
     const stories = topicsCollected.map((t, i) => ({ title: t || '無題', parts: [], originalPlayerIndex: i }));
     gameState = { stories, currentRound: 0, totalRounds: numPages, shifts, numPlayers: np, players: [...players] };
@@ -1602,12 +1603,13 @@ function renderHostTopicStatus() {
   const el = document.getElementById('host-topic-status');
   if (!isHost) return;
   let html = '<p style="font-size:12px;color:#8899aa;margin-bottom:6px;font-family:\'Noto Sans JP\',sans-serif;">提出状況：</p><div style="display:flex;flex-wrap:wrap;gap:6px;">';
-  players.forEach((p, i) => {
+  for (let i = 0; i < topicsCollected.length; i++) {
+    const p = players[i] || ('Player ' + (i + 1));
     const done = topicsCollected[i] != null && topicsCollected[i] !== '';
     const color = done ? '#4ecdc4' : '#555';
     const icon = done ? '✓' : '…';
     html += '<span style="font-size:12px;padding:3px 8px;border-radius:12px;background:' + (done ? 'rgba(78,205,196,0.15)' : 'rgba(255,255,255,0.05)') + ';color:' + color + ';font-family:\'Noto Sans JP\',sans-serif;">' + icon + ' ' + escHtml(p) + '</span>';
-  });
+  }
   html += '</div>';
   el.innerHTML = html;
 }
@@ -1965,7 +1967,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.81</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.82</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
