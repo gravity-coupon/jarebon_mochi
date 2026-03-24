@@ -165,7 +165,7 @@
     <button class="btn btn-primary" onclick="showHostSetup()">部屋をつくる</button>
     <div style="display:flex;gap:8px;align-items:stretch;">
       <button class="btn btn-secondary" onclick="showJoin()" style="flex:1;">部屋に参加する</button>
-      <button id="rejoin-btn" class="btn btn-ghost" onclick="rejoinLastRoom()" style="display:none;padding:14px 14px;font-size:12px;white-space:nowrap;font-family:'Noto Sans JP',sans-serif;" title="前回のルームに再入室"></button>
+      <button id="rejoin-btn" class="btn btn-secondary" onclick="rejoinLastRoom()" style="display:none;padding:14px 16px;font-size:14px;white-space:nowrap;font-family:'Noto Sans JP',sans-serif;" title="前回のルームに再入室"></button>
     </div>
   </div>
 
@@ -1242,17 +1242,33 @@ function updateRejoinButton() {
   const btn = document.getElementById('rejoin-btn');
   const last = loadLastRoom();
   if (last && last.roomId && last.playerName) {
-    btn.textContent = '🔄 ' + last.roomId;
+    btn.textContent = last.roomId;
+    btn.disabled = false;
     btn.style.display = 'block';
   } else {
     btn.style.display = 'none';
   }
 }
 
+let _rejoinOrigText = '';
+
 function rejoinLastRoom() {
   const last = loadLastRoom();
   if (!last || !last.roomId || !last.playerName) return;
+  const btn = document.getElementById('rejoin-btn');
+  _rejoinOrigText = btn.textContent;
+  btn.textContent = '接続中...';
+  btn.disabled = true;
   roomId = last.roomId;
+  // Set a timeout to restore button if connection fails
+  const failTimer = setTimeout(() => {
+    if (currentScreenName === 'title') {
+      btn.textContent = _rejoinOrigText;
+      btn.disabled = false;
+    }
+  }, 12000);
+  // Store the fail timer so we can cancel on success
+  btn._failTimer = failTimer;
   joinRoom({ roomId: last.roomId, playerName: last.playerName });
 }
 
@@ -1461,6 +1477,8 @@ function handleGuestMessage(data) {
     players = data.players;
     if (data.token) { try { sessionStorage.setItem('watashibunko_token', data.token); } catch(e) {} }
     saveLastRoom(roomId, players[myIndex]);
+    const rBtn = document.getElementById('rejoin-btn');
+    if (rBtn._failTimer) { clearTimeout(rBtn._failTimer); rBtn._failTimer = null; }
     document.getElementById('lobby-title').textContent = '参加しました！';
     document.getElementById('lobby-subtitle').textContent = 'ホストがゲームを開始するのを待っています...';
     renderLobbyPlayers();
@@ -1471,7 +1489,8 @@ function handleGuestMessage(data) {
     saveGuestState();
 
   } else if (data.type === 'joinError') {
-    // Name conflict — show error on join screen
+    const rBtn = document.getElementById('rejoin-btn');
+    if (rBtn._failTimer) { clearTimeout(rBtn._failTimer); rBtn._failTimer = null; }
     document.getElementById('join-error').textContent = data.message;
     document.getElementById('join-btn').textContent = '参加する';
     document.getElementById('join-btn').disabled = false;
@@ -1487,6 +1506,8 @@ function handleGuestMessage(data) {
     hideDisconnectOverlay();
     resetReconnectAttempts();
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    const rBtn = document.getElementById('rejoin-btn');
+    if (rBtn._failTimer) { clearTimeout(rBtn._failTimer); rBtn._failTimer = null; }
     saveLastRoom(roomId, players[myIndex]);
     saveGuestState();
 
@@ -2285,7 +2306,7 @@ window.addEventListener('load', () => {
   updateRejoinButton();
 });
 </script>
-<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.98</div>
+<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.99</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 <div id="debug-log" style="position:fixed;top:0;right:0;width:320px;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;font-family:monospace;padding:4px 6px;z-index:9999;pointer-events:auto;display:none;white-space:pre-wrap;word-break:break-all;"></div>
 <script>
