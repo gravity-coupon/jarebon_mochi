@@ -843,6 +843,11 @@ function handleHostMessage(conn, data) {
 
     // Game already in progress and this is a new name — spectator mode
     if (gamePhase !== 'lobby' && gamePhase !== 'idle') {
+      // Block if same name as host
+      if (data.name === players[0]) {
+        conn.send({ type: 'joinError', message: 'その名前はホストが使用中です。別の名前でお試しください。' });
+        return;
+      }
       conn._playerName = data.name;
       conn._isSpectator = true;
       spectators.push(conn);
@@ -1665,7 +1670,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.65</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.66</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
