@@ -958,7 +958,7 @@ function showJoin() {
 function joinRoom(rejoinInfo) {
   const rid = rejoinInfo ? rejoinInfo.roomId : document.getElementById('join-room').value.trim();
   const name = rejoinInfo ? rejoinInfo.playerName : document.getElementById('join-name').value.trim();
-  const isRejoin = !!rejoinInfo;
+  const isRejoin = !!rejoinInfo && !rejoinInfo._isRetry;
   const retryCount = rejoinInfo ? (rejoinInfo._retry || 0) : 0;
   const MAX_RETRIES = 2;
 
@@ -1015,7 +1015,7 @@ function joinRoom(rejoinInfo) {
         if (retryCount < MAX_RETRIES) {
           setTimeout(() => {
             if (myGen !== guestConnGen) return;
-            joinRoom({ roomId: rid, playerName: name, _retry: retryCount + 1, _isFirstJoin: true });
+            joinRoom({ roomId: rid, playerName: name, _retry: retryCount + 1, _isFirstJoin: true, _isRetry: true });
           }, 2000);
         } else {
           document.getElementById('join-error').textContent = '接続に失敗しました。ルームコードを確認するか、しばらくしてからお試しください。';
@@ -1034,7 +1034,7 @@ function joinRoom(rejoinInfo) {
       if (retryCount < MAX_RETRIES) {
         setTimeout(() => {
           if (myGen !== guestConnGen) return;
-          joinRoom({ roomId: rid, playerName: name, _retry: retryCount + 1, _isFirstJoin: true });
+          joinRoom({ roomId: rid, playerName: name, _retry: retryCount + 1, _isFirstJoin: true, _isRetry: true });
         }, 2000);
       } else {
         document.getElementById('join-error').textContent = 'ルームが見つかりません。コードが正しいか、ホストが部屋を開いているか確認してください。';
@@ -1053,7 +1053,7 @@ function joinRoom(rejoinInfo) {
         if (retryCount < MAX_RETRIES) {
           setTimeout(() => {
             if (myGen !== guestConnGen) return;
-            joinRoom({ roomId: rid, playerName: name, _retry: retryCount + 1, _isFirstJoin: true });
+            joinRoom({ roomId: rid, playerName: name, _retry: retryCount + 1, _isFirstJoin: true, _isRetry: true });
           }, 1000);
         } else {
           document.getElementById('join-error').textContent = 'ルームに接続できませんでした。ルームが既に閉じられているか、ネットワークに問題がある可能性があります。';
@@ -1702,7 +1702,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.71</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.72</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
