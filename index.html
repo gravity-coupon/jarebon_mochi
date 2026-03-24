@@ -804,7 +804,7 @@ function backToTitle() {
   clearHostState();
   clearGuestState();
   clearFinishedGame();
-  try { sessionStorage.removeItem('watashibunko_token'); } catch(e) {}
+  try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
   clearDraft();
   hideDisconnectOverlay();
   showScreen('title');
@@ -813,7 +813,7 @@ function backToTitle() {
 function leaveLobby() {
   guestConnGen++;
   clearGuestState();
-  try { sessionStorage.removeItem('watashibunko_token'); } catch(e) {}
+  try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
   if (hostConn && hostConn.open) {
     try { hostConn.send({ type: 'leave', playerIndex: myIndex }); } catch(e) {}
   }
@@ -992,6 +992,7 @@ function handleHostMessage(conn, data) {
         gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
         roundDoneList: [...roundDone],
         playerAlreadySubmitted: roundDone.has(existingIdx),
+        topicAlreadySubmitted: topicsCollected[existingIdx] != null && topicsCollected[existingIdx] !== '',
       });
       return;
     }
@@ -1249,7 +1250,19 @@ function handleGuestMessage(data) {
       renderLobbyPlayers();
       showScreen('lobby');
     } else if (phase === 'topic') {
-      showScreen('topic');
+      // Check if we submitted a topic locally but host didn't receive it
+      if (!data.topicAlreadySubmitted) {
+        const savedTopic = (function() { try { return sessionStorage.getItem('watashibunko_topic') || ''; } catch(e) { return ''; } })();
+        if (savedTopic) {
+          // Auto-resend the topic
+          hostConn.send({ type: 'topicSubmit', topic: savedTopic });
+          showWaiting(0, players.length);
+        } else {
+          showScreen('topic');
+        }
+      } else {
+        showWaiting(0, players.length);
+      }
     } else if (phase === 'writing' && gameState) {
       isRestoring = true;
       startWritingRound(gameState.currentRound);
@@ -1279,6 +1292,7 @@ function handleGuestMessage(data) {
     renderLobbyPlayers();
   } else if (data.type === 'startTopicPhase') {
     document.getElementById('topic-input').value = '';
+    try { sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
     showScreen('topic');
   } else if (data.type === 'topicProgress') {
     updateWaiting(data.count, data.total);
@@ -1399,6 +1413,7 @@ function submitTopic() {
     }
   } else {
     hostConn.send({ type: 'topicSubmit', topic });
+    try { sessionStorage.setItem('watashibunko_topic', topic); } catch(e) {}
     showWaiting(0, players.length);
   }
 }
@@ -1801,7 +1816,7 @@ function abortGameToTitle() {
     clearHostState();
     clearGuestState();
     clearFinishedGame();
-    try { sessionStorage.removeItem('watashibunko_token'); } catch(e) {}
+    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
     clearDraft();
     showScreen('title');
   }, 100);
@@ -1831,7 +1846,7 @@ function playAgain() {
     clearHostState();
     clearGuestState();
     clearFinishedGame();
-    try { sessionStorage.removeItem('watashibunko_token'); } catch(e) {}
+    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
     clearDraft();
     showScreen('title');
   }, 100);
@@ -1981,7 +1996,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.83</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.84</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
