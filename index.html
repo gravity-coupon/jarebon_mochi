@@ -322,7 +322,7 @@
   <h2 class="gradient-title text-center mb-8" style="font-size:28px;">完成した物語</h2>
   <p id="results-subtitle" class="text-center text-dim mb-24"></p>
   <div id="results-tabs" class="flex-center mb-24"></div>
-  <div class="text-center mb-16">
+  <div class="text-center mb-16" style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;">
     <select id="story-font-select" onchange="changeStoryFont(this.value)" style="
       padding:8px 16px; border-radius:8px; font-size:14px; font-family:inherit;
       background:#16213e; color:#eee; border:1px solid #2a3a5e; cursor:pointer; outline:none;
@@ -334,6 +334,7 @@
       <option value="'Klee One', cursive" style="font-family:'Klee One', cursive;">クレー One（楷書）</option>
       <option value="'Noto Sans JP', sans-serif" style="font-family:'Noto Sans JP', sans-serif;">Noto Sans（ゴシック）</option>
     </select>
+    <div id="theme-selector" style="display:flex;gap:6px;align-items:center;"></div>
   </div>
   <div id="results-story-wrapper">
     <div id="results-story" class="card"></div>
@@ -1483,6 +1484,52 @@ function renderHostWriteStatus() {
 // ===================== RESULTS =====================
 let currentStoryView = 0;
 
+const STORY_THEMES = [
+  { id: 'midnight',  name: '深夜',   bg: '#16213e', text: '#eee',    title: '#f0c040', meta: '#8899aa', border: '#2a3a5e', gradient: 'linear-gradient(145deg, #16213e, #1c2a4a)', dot: 'linear-gradient(135deg, #1c2a4a, #16213e)' },
+  { id: 'ink',       name: '墨',     bg: '#1a1a1a', text: '#d4d4d4', title: '#e8c56d', meta: '#777',    border: '#333',    gradient: 'linear-gradient(145deg, #1a1a1a, #222)',    dot: 'linear-gradient(135deg, #222, #1a1a1a)' },
+  { id: 'parchment', name: '羊皮紙', bg: '#f5f0e1', text: '#3a3226', title: '#8b4513', meta: '#8b7355', border: '#d4c9a8', gradient: 'linear-gradient(145deg, #f5f0e1, #ebe4d0)', dot: 'linear-gradient(135deg, #f5f0e1, #e0d6be)' },
+  { id: 'sakura',    name: '桜',     bg: '#fdf2f5', text: '#4a3040', title: '#c0506a', meta: '#b08898', border: '#e8c8d4', gradient: 'linear-gradient(145deg, #fdf2f5, #f8e4ec)', dot: 'linear-gradient(135deg, #f8e4ec, #fdf2f5)' },
+  { id: 'forest',    name: '森',     bg: '#1a2e1a', text: '#d0e0c8', title: '#8bc34a', meta: '#7a9a6a', border: '#2e4a2e', gradient: 'linear-gradient(145deg, #1a2e1a, #223a22)', dot: 'linear-gradient(135deg, #223a22, #1a2e1a)' },
+  { id: 'ocean',     name: '海',     bg: '#0f1e33', text: '#c8dae8', title: '#5bb8f0', meta: '#6889a8', border: '#1e3a5a', gradient: 'linear-gradient(145deg, #0f1e33, #162a44)', dot: 'linear-gradient(135deg, #162a44, #0f1e33)' },
+];
+
+let currentTheme = STORY_THEMES[0];
+
+function renderThemeSelector() {
+  const cont = document.getElementById('theme-selector');
+  cont.innerHTML = '';
+  STORY_THEMES.forEach(t => {
+    const btn = document.createElement('button');
+    btn.title = t.name;
+    btn.style.cssText = 'width:24px;height:24px;border-radius:50%;border:2px solid ' + (t.id === currentTheme.id ? '#f0c040' : 'transparent') + ';cursor:pointer;background:' + t.dot + ';transition:border-color 0.2s;outline:none;padding:0;';
+    btn.onmouseover = () => { if (t.id !== currentTheme.id) btn.style.borderColor = 'rgba(240,192,64,0.4)'; };
+    btn.onmouseout = () => { if (t.id !== currentTheme.id) btn.style.borderColor = 'transparent'; };
+    btn.onclick = () => { applyTheme(t.id); };
+    cont.appendChild(btn);
+  });
+}
+
+function applyTheme(themeId) {
+  const t = STORY_THEMES.find(th => th.id === themeId);
+  if (!t) return;
+  currentTheme = t;
+  const el = document.getElementById('results-story');
+  el.style.background = t.gradient;
+  el.style.borderColor = t.border;
+  el.style.color = t.text;
+  renderThemeSelector();
+  renderStory(currentStoryView);
+  try { localStorage.setItem('watashibunko_theme', themeId); } catch(e) {}
+}
+
+function restoreTheme() {
+  try {
+    const saved = localStorage.getItem('watashibunko_theme');
+    if (saved) { applyTheme(saved); return; }
+  } catch(e) {}
+  applyTheme('midnight');
+}
+
 function changeStoryFont(fontFamily) {
   document.getElementById('results-story').style.fontFamily = fontFamily;
   document.getElementById('story-font-select').style.fontFamily = fontFamily;
@@ -1503,6 +1550,8 @@ function restoreStoryFont() {
 function showResults() {
   currentStoryView = 0;
   document.getElementById('results-subtitle').textContent = gameState.stories.length + ' つの物語が完成しました';
+  renderThemeSelector();
+  restoreTheme();
   renderResultsTabs();
   renderStory(0);
   restoreStoryFont();
@@ -1535,11 +1584,12 @@ function getPlayerColor(authorName) {
 
 function renderStory(idx) {
   const story = gameState.stories[idx];
-  let html = '<h3 style="font-size:22px;text-align:center;margin-bottom:24px;color:#f0c040;">「' + escHtml(story.title) + '」</h3>';
+  const t = currentTheme;
+  let html = '<h3 style="font-size:22px;text-align:center;margin-bottom:24px;color:' + t.title + ';">「' + escHtml(story.title) + '」</h3>';
   story.parts.forEach((part, i) => {
     const color = getPlayerColor(part.author);
     html += '<div class="part-block" style="border-left:3px solid ' + color + ';">';
-    html += '<p style="font-size:12px;margin-bottom:4px;"><span style="color:' + color + ';font-weight:700;">' + escHtml(part.author) + '</span> <span style="color:#8899aa;">— ページ ' + (i + 1) + '</span></p>';
+    html += '<p style="font-size:12px;margin-bottom:4px;"><span style="color:' + color + ';font-weight:700;">' + escHtml(part.author) + '</span> <span style="color:' + t.meta + ';">— ページ ' + (i + 1) + '</span></p>';
     html += '<p style="font-size:16px;line-height:1.8;white-space:pre-wrap;">' + escHtml(part.text) + '</p>';
     html += '</div>';
   });
@@ -1682,7 +1732,7 @@ function saveStoryAsImage() {
   const el = document.getElementById('results-story');
   showCopyFeedback('画像を生成中...');
   html2canvas(el, {
-    backgroundColor: '#16213e',
+    backgroundColor: currentTheme.bg,
     scale: 2,
     useCORS: true,
   }).then(canvas => {
@@ -1769,7 +1819,7 @@ window.addEventListener('load', () => {
   }
 });
 </script>
-<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.76</div>
+<div style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v1.77</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:monospace;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 </body>
 </html>
