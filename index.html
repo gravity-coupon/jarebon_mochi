@@ -2086,6 +2086,10 @@ const STORY_THEMES = [
   { id: 'sakura',    name: '桜',     bg: '#fdf2f5', text: '#4a3040', title: '#c0506a', meta: '#b08898', border: '#e8c8d4', gradient: 'linear-gradient(145deg, #fdf2f5, #f8e4ec)', dot: 'linear-gradient(135deg, #f8e4ec, #fdf2f5)' },
   { id: 'forest',    name: '森',     bg: '#1a2e1a', text: '#d0e0c8', title: '#8bc34a', meta: '#7a9a6a', border: '#2e4a2e', gradient: 'linear-gradient(145deg, #1a2e1a, #223a22)', dot: 'linear-gradient(135deg, #223a22, #1a2e1a)' },
   { id: 'ocean',     name: '海',     bg: '#0f1e33', text: '#c8dae8', title: '#5bb8f0', meta: '#6889a8', border: '#1e3a5a', gradient: 'linear-gradient(145deg, #0f1e33, #162a44)', dot: 'linear-gradient(135deg, #162a44, #0f1e33)' },
+  { id: 'sunset',    name: '夕焼け', bg: '#2a1215', text: '#f0d8c8', title: '#f08050', meta: '#b07868', border: '#4a2228', gradient: 'linear-gradient(145deg, #2a1215, #3a1a1e)', dot: 'linear-gradient(135deg, #3a1a1e, #2a1215)' },
+  { id: 'snow',      name: '雪',     bg: '#f0f2f5', text: '#2a3040', title: '#4a6a8a', meta: '#8898a8', border: '#d0d8e0', gradient: 'linear-gradient(145deg, #f0f2f5, #e6eaef)', dot: 'linear-gradient(135deg, #e6eaef, #f0f2f5)' },
+  { id: 'shion',     name: '紫苑',   bg: '#1a1028', text: '#d8c8e8', title: '#b06adf', meta: '#8878a8', border: '#2e1e42', gradient: 'linear-gradient(145deg, #1a1028, #221438)', dot: 'linear-gradient(135deg, #221438, #1a1028)' },
+  { id: 'desert',    name: '砂漠',   bg: '#f5ead0', text: '#3a2e1e', title: '#b07830', meta: '#9a8868', border: '#d8c8a0', gradient: 'linear-gradient(145deg, #f5ead0, #ece0c0)', dot: 'linear-gradient(135deg, #ece0c0, #f5ead0)' },
 ];
 
 let currentTheme = STORY_THEMES[0];
@@ -2420,7 +2424,7 @@ window.addEventListener('load', () => {
   updateRejoinButton();
 });
 </script>
-<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v2.19</div>
+<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v2.20</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:'Nunito',sans-serif;font-weight:700;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 <div id="debug-log" style="position:fixed;top:0;right:0;width:320px;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;font-family:monospace;padding:4px 6px;z-index:9999;pointer-events:auto;display:none;white-space:pre-wrap;word-break:break-all;"></div>
 <script>
