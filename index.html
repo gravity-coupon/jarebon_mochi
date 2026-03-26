@@ -269,26 +269,28 @@
     <div class="mb-24">
       <button class="btn btn-ghost btn-full" onclick="randomTopic()" style="padding:10px 16px;font-size:14px;">🎲 ランダム</button>
     </div>
-    <button class="btn btn-primary btn-full" onclick="submitTopic()">決定</button>
-  </div>
-</div>
-
-<!-- ====== Waiting (after topic submit) ====== -->
-<div id="screen-waiting" class="screen container hidden">
-  <div class="card text-center">
-    <div style="font-size:48px;" class="mb-16">⏳</div>
-    <h2 style="font-size:20px;" class="mb-8">他のプレイヤーを待っています...</h2>
-    <p class="text-dim" style="font-size:14px;"><span id="wait-done">0</span> / <span id="wait-total">0</span> 人が完了</p>
-    <div class="progress-bar"><div id="wait-progress" class="progress-fill" style="width:0%;"></div></div>
-    <div id="host-panel-wait" class="hidden" style="margin-top:20px;border:1px solid #2a3a5e;border-radius:12px;padding:14px 16px;">
+    <button id="topic-submit-btn" class="btn btn-primary btn-full" onclick="submitTopic()">決定</button>
+    <div id="topic-submitted-msg" class="hidden text-center" style="margin-top:12px;">
+      <p id="topic-submitted-text" style="font-size:14px;"></p>
+    </div>
+    <div style="margin-top:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span class="text-dim" style="font-size:13px;">進捗</span>
+        <span class="text-dim" style="font-size:13px;"><span id="topic-done">0</span> / <span id="topic-total">0</span> 人が完了</span>
+      </div>
+      <div class="progress-bar"><div id="topic-progress" class="progress-fill" style="width:0%;"></div></div>
+    </div>
+    <div id="host-panel-topic" class="hidden" style="margin-top:16px;border:1px solid #2a3a5e;border-radius:12px;padding:14px 16px;">
       <p style="font-size:11px;color:#f0c040;margin-bottom:10px;font-family:'Noto Sans JP',sans-serif;">👑 ホスト専用</p>
-      <div id="host-topic-status" style="text-align:left;"></div>
+      <div id="host-topic-status-inline"></div>
       <div class="text-center" style="margin-top:12px;">
-        <button class="btn btn-ghost" onclick="confirmAbortGame()" style="padding:8px 16px;font-size:13px;color:#e94560;border-color:#e94560;">⏹ ゲームを中断</button>
+        <button class="btn btn-ghost" onclick="abortGameToTitle()" style="padding:8px 16px;font-size:13px;color:#e94560;border-color:#e94560;">⏹ ゲームを中断</button>
       </div>
     </div>
   </div>
 </div>
+
+<!-- ====== Waiting (after topic submit) ====== -->
 <div id="screen-writing" class="screen container hidden">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-20">
@@ -1204,7 +1206,7 @@ function getWriterForStoryAtRound(si, round, np, shifts) {
 }
 
 // ===================== SCREEN MANAGEMENT =====================
-const screens = ['title','host','join','lobby','topic','waiting','writing','results'];
+const screens = ['title','host','join','lobby','topic','writing','results'];
 let currentScreenName = 'title';
 function showScreen(name) {
   currentScreenName = name;
@@ -2028,13 +2030,26 @@ function handleGuestMessage(data) {
       if (!data.topicAlreadySubmitted) {
         const savedTopic = (function() { try { return sessionStorage.getItem('watashibunko_topic') || ''; } catch(e) { return ''; } })();
         if (savedTopic) {
+          // Auto-resend saved topic
+          initTopicScreen(topicCount, topicTotal);
+          document.getElementById('topic-input').value = savedTopic;
+          myTopicSubmitted = true;
+          document.getElementById('topic-submitted-msg').classList.remove('hidden');
+          document.getElementById('topic-submit-btn').textContent = '変更';
+          setTopicSubmitStatus('sending');
           hostConn.send({ type: 'topicSubmit', topic: savedTopic });
-          showWaiting(topicCount, topicTotal);
         } else {
-          showScreen('topic');
+          initTopicScreen(topicCount, topicTotal);
         }
       } else {
-        showWaiting(topicCount, topicTotal);
+        // Already submitted — show topic screen with submitted state
+        const savedTopic = (function() { try { return sessionStorage.getItem('watashibunko_topic') || ''; } catch(e) { return ''; } })();
+        initTopicScreen(topicCount, topicTotal);
+        if (savedTopic) document.getElementById('topic-input').value = savedTopic;
+        myTopicSubmitted = true;
+        document.getElementById('topic-submitted-msg').classList.remove('hidden');
+        document.getElementById('topic-submit-btn').textContent = '変更';
+        setTopicSubmitStatus('confirmed');
       }
     } else if (phase === 'writing' && gameState) {
       if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
@@ -2076,12 +2091,11 @@ function handleGuestMessage(data) {
     players = data.players;
     renderLobbyPlayers();
   } else if (data.type === 'startTopicPhase') {
-    document.getElementById('topic-input').value = '';
     try { sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
     if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
-    showScreen('topic');
+    initTopicScreen(0, players.length);
   } else if (data.type === 'topicProgress') {
-    updateWaiting(data.count, data.total);
+    updateTopicProgress(data.count, data.total);
   } else if (data.type === 'startWriting') {
     gameState = data.gameState;
     if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
@@ -2105,7 +2119,7 @@ function handleGuestMessage(data) {
     if (partRetryTimer) { clearTimeout(partRetryTimer); partRetryTimer = null; }
     setSubmitStatus('confirmed');
   } else if (data.type === 'topicAck') {
-    // Topic received by host
+    setTopicSubmitStatus('confirmed');
   } else if (data.type === 'showResults') {
     gameState = data.gameState;
     saveFinishedGame();
@@ -2190,8 +2204,7 @@ function startGame() {
   topicsCollected = new Array(players.length);
   gamePhase = 'topic';
   gtag('event', 'game_start', { player_count: players.length, page_count: numPages });
-  document.getElementById('topic-input').value = '';
-  showScreen('topic');
+  initTopicScreen(0, players.length);
   broadcast({ type: 'startTopicPhase' });
   startHostHeartbeat();
   saveHostState();
@@ -2203,31 +2216,60 @@ function randomTopic() {
 }
 
 let topicsComplete = false;
+let myTopicSubmitted = false;
 
 function submitTopic() {
   const topic = document.getElementById('topic-input').value.trim();
   if (!topic) return;
   gtag('event', 'submit_topic');
+  myTopicSubmitted = true;
+  document.getElementById('topic-submitted-msg').classList.remove('hidden');
+  document.getElementById('topic-submit-btn').textContent = '変更';
   if (isHost) {
     topicsComplete = false;
+    setTopicSubmitStatus('confirmed');
     handleTopicFromPlayer(0, topic);
-    if (!topicsComplete) {
-      showWaiting(topicsCollected.filter(t => t != null && t !== '').length, topicsCollected.length);
-    }
   } else {
+    setTopicSubmitStatus('sending');
     hostConn.send({ type: 'topicSubmit', topic });
     try { sessionStorage.setItem('watashibunko_topic', topic); } catch(e) {}
-    showWaiting(0, players.length);
   }
+}
+
+function setTopicSubmitStatus(status) {
+  const el = document.getElementById('topic-submitted-text');
+  if (status === 'sending') {
+    el.style.color = '#f0c040';
+    el.textContent = '⏳ 送信中...';
+  } else {
+    el.style.color = '#4ecdc4';
+    el.textContent = '✓ 決定済み（他のプレイヤーが決めるまで変更できます）';
+  }
+}
+
+function updateTopicProgress(done, total) {
+  document.getElementById('topic-done').textContent = done;
+  document.getElementById('topic-total').textContent = total;
+  document.getElementById('topic-progress').style.width = total > 0 ? (done / total * 100) + '%' : '0%';
+  document.getElementById('host-panel-topic').classList.toggle('hidden', !isHost);
+  if (isHost) renderHostTopicStatusInline();
+}
+
+function initTopicScreen(done, total) {
+  myTopicSubmitted = false;
+  document.getElementById('topic-input').value = '';
+  document.getElementById('topic-submit-btn').textContent = '決定';
+  document.getElementById('topic-submitted-msg').classList.add('hidden');
+  updateTopicProgress(done || 0, total || players.length);
+  showScreen('topic');
 }
 
 function handleTopicFromPlayer(pIdx, topic) {
   topicsCollected[pIdx] = topic;
   const count = topicsCollected.filter(t => t != null && t !== '').length;
-  const total = topicsCollected.length; // use original array length, not current players.length
+  const total = topicsCollected.length;
   broadcast({ type: 'topicProgress', count: count, total: total });
-  updateWaiting(count, total);
-  renderHostTopicStatus();
+  updateTopicProgress(count, total);
   saveHostState();
   if (count === total) {
     topicsComplete = true;
@@ -2453,23 +2495,7 @@ function handlePartFromPlayer(pIdx, storyIndex, round, text, isResubmit) {
   }
 }
 
-// ===================== WAITING =====================
-function showWaiting(done, total) {
-  document.getElementById('wait-done').textContent = done;
-  document.getElementById('wait-total').textContent = total;
-  document.getElementById('wait-progress').style.width = (done / total * 100) + '%';
-  document.getElementById('host-panel-wait').classList.toggle('hidden', !isHost);
-  if (isHost) renderHostTopicStatus();
-  showScreen('waiting');
-}
-
-function updateWaiting(done, total) {
-  document.getElementById('wait-done').textContent = done;
-  document.getElementById('wait-total').textContent = total;
-  document.getElementById('wait-progress').style.width = (done / total * 100) + '%';
-  if (isHost) renderHostTopicStatus();
-}
-
+// ===================== PROGRESS =====================
 function updateWriteProgress(done, total) {
   document.getElementById('write-done').textContent = done;
   document.getElementById('write-total').textContent = total;
@@ -2478,9 +2504,9 @@ function updateWriteProgress(done, total) {
 }
 
 // ===================== HOST-ONLY STATUS =====================
-function renderHostTopicStatus() {
-  const el = document.getElementById('host-topic-status');
-  if (!isHost) return;
+function renderHostTopicStatusInline() {
+  const el = document.getElementById('host-topic-status-inline');
+  if (!isHost || !el) return;
   let html = '<p style="font-size:12px;color:#8899aa;margin-bottom:6px;font-family:\'Noto Sans JP\',sans-serif;">提出状況：</p><div style="display:flex;flex-wrap:wrap;gap:6px;">';
   for (let i = 0; i < topicsCollected.length; i++) {
     const p = players[i] || ('Player ' + (i + 1));
@@ -2823,7 +2849,9 @@ window.addEventListener('load', () => {
         renderHostPlayers(); saveHostState();
       });
     } else if (gamePhase === 'topic') {
-      showScreen('topic');
+      const count = topicsCollected.filter(t => t != null && t !== '').length;
+      initTopicScreen(count, topicsCollected.length);
+      startHostHeartbeat();
     } else if (gamePhase === 'writing' && gameState) {
       isRestoring = true;
       startWritingRound(gameState.currentRound);
@@ -2862,7 +2890,7 @@ window.addEventListener('load', () => {
   updateRejoinButton();
 });
 </script>
-<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v2.24</div>
+<div id="version-label" style="position:fixed;bottom:8px;right:12px;font-size:11px;color:#8899aa;opacity:0.7;font-family:monospace;">v2.25</div>
 <div id="room-code-badge" style="position:fixed;bottom:8px;left:12px;font-size:12px;color:#f0c040;opacity:0.7;font-family:'Nunito',sans-serif;font-weight:700;display:none;cursor:pointer;" onclick="copyRoomCodeBadge()" title="クリックでコピー"></div>
 <div id="debug-log" style="position:fixed;top:0;right:0;width:320px;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;font-family:monospace;padding:4px 6px;z-index:9999;pointer-events:auto;display:none;white-space:pre-wrap;word-break:break-all;"></div>
 <script>
