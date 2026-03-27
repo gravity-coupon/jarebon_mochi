@@ -9,7 +9,7 @@
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
-  const APP_VERSION = 'v2.28';
+  const APP_VERSION = 'v2.29';
   gtag('js', new Date());
   gtag('set', { 'app_version': APP_VERSION });
   gtag('config', 'G-341D8LEXRV');
@@ -266,7 +266,7 @@
     <h2 class="text-center mb-8" style="font-size:24px;">タイトルを決めよう</h2>
     <p class="text-dim text-center mb-24" style="font-size:14px;">物語の最初のタイトルを書いてください</p>
     <div class="mb-16">
-      <input id="topic-input" class="input-field" placeholder="タイトルを入力..." maxlength="50">
+      <input id="topic-input" class="input-field" placeholder="タイトルを入力..." maxlength="50" oninput="saveTopicDraft()">
     </div>
     <div class="mb-24">
       <button class="btn btn-ghost btn-full" onclick="randomTopic()" style="padding:10px 16px;font-size:14px;">🎲 ランダム</button>
@@ -1231,7 +1231,7 @@ function backToTitle() {
   clearHostState();
   clearGuestState();
   clearFinishedGame();
-  try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
+  try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); sessionStorage.removeItem('watashibunko_topic_draft'); } catch(e) {}
   clearDraft();
   stopHeartbeat();
   hideDisconnectOverlay();
@@ -1241,7 +1241,7 @@ function backToTitle() {
 function leaveLobby() {
   guestConnGen++;
   clearGuestState();
-  try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
+  try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); sessionStorage.removeItem('watashibunko_topic_draft'); } catch(e) {}
   if (hostConn && hostConn.open) {
     try { hostConn.send({ type: 'leave', playerIndex: myIndex }); } catch(e) {}
   }
@@ -2031,10 +2031,12 @@ function handleGuestMessage(data) {
       const topicTotal = data.topicsTotal || players.length;
       if (!data.topicAlreadySubmitted) {
         const savedTopic = (function() { try { return sessionStorage.getItem('watashibunko_topic') || ''; } catch(e) { return ''; } })();
+        const draftTopic = loadTopicDraft();
         if (savedTopic) {
           // Auto-resend saved topic
           initTopicScreen(topicCount, topicTotal, true);
           document.getElementById('topic-input').value = savedTopic;
+          saveTopicDraft(savedTopic);
           myTopicSubmitted = true;
           document.getElementById('topic-submitted-msg').classList.remove('hidden');
           document.getElementById('topic-submit-btn').textContent = '変更';
@@ -2042,12 +2044,21 @@ function handleGuestMessage(data) {
           sendTopicWithRetry(savedTopic);
         } else {
           initTopicScreen(topicCount, topicTotal, true);
+          if (draftTopic) {
+            document.getElementById('topic-input').value = draftTopic;
+            saveTopicDraft(draftTopic);
+          }
         }
       } else {
         // Already submitted — show topic screen with submitted state
         const savedTopic = (function() { try { return sessionStorage.getItem('watashibunko_topic') || ''; } catch(e) { return ''; } })();
+        const draftTopic = loadTopicDraft();
         initTopicScreen(topicCount, topicTotal, true);
-        if (savedTopic) document.getElementById('topic-input').value = savedTopic;
+        const topicToShow = savedTopic || draftTopic;
+        if (topicToShow) {
+          document.getElementById('topic-input').value = topicToShow;
+          saveTopicDraft(topicToShow);
+        }
         myTopicSubmitted = true;
         document.getElementById('topic-submitted-msg').classList.remove('hidden');
         document.getElementById('topic-submit-btn').textContent = '変更';
@@ -2093,7 +2104,17 @@ function handleGuestMessage(data) {
     players = data.players;
     renderLobbyPlayers();
   } else if (data.type === 'startTopicPhase') {
-    try { sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
+    const currentTopicVal = (document.getElementById('topic-input') && currentScreenName === 'topic')
+      ? (document.getElementById('topic-input').value || '')
+      : '';
+    if (currentTopicVal.trim() && !myTopicSubmitted) {
+      saveTopicDraft(currentTopicVal);
+    } else if (currentScreenName !== 'topic') {
+      clearTopicDraft();
+    }
+    if (!(currentScreenName === 'topic' && myTopicSubmitted)) {
+      try { sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
+    }
     topicAckReceived = false;
     if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
     if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
@@ -2101,6 +2122,7 @@ function handleGuestMessage(data) {
   } else if (data.type === 'topicProgress') {
     updateTopicProgress(data.count, data.total);
   } else if (data.type === 'startWriting') {
+    clearTopicDraft();
     gameState = data.gameState;
     if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
     startWritingRound(gameState.currentRound);
@@ -2127,6 +2149,7 @@ function handleGuestMessage(data) {
     if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
     setTopicSubmitStatus('confirmed');
   } else if (data.type === 'showResults') {
+    clearTopicDraft();
     gameState = data.gameState;
     if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
     topicAckReceived = false;
@@ -2224,11 +2247,29 @@ function startGame() {
 
 // ===================== TOPIC =====================
 function randomTopic() {
-  document.getElementById('topic-input').value = generateRandomTopic();
+  const topic = generateRandomTopic();
+  document.getElementById('topic-input').value = topic;
+  saveTopicDraft(topic);
 }
 
 let topicsComplete = false;
 let myTopicSubmitted = false;
+const SS_TOPIC_DRAFT = 'watashibunko_topic_draft';
+
+function saveTopicDraft(value) {
+  try {
+    const nextValue = value != null ? String(value) : document.getElementById('topic-input').value;
+    sessionStorage.setItem(SS_TOPIC_DRAFT, nextValue);
+  } catch(e) {}
+}
+
+function loadTopicDraft() {
+  try { return sessionStorage.getItem(SS_TOPIC_DRAFT) || ''; } catch(e) { return ''; }
+}
+
+function clearTopicDraft() {
+  try { sessionStorage.removeItem(SS_TOPIC_DRAFT); } catch(e) {}
+}
 
 function submitTopic() {
   const topic = document.getElementById('topic-input').value.trim();
@@ -2237,6 +2278,7 @@ function submitTopic() {
   myTopicSubmitted = true;
   document.getElementById('topic-submitted-msg').classList.remove('hidden');
   document.getElementById('topic-submit-btn').textContent = '変更';
+  saveTopicDraft(topic);
   try { sessionStorage.setItem('watashibunko_topic', topic); } catch(e) {}
   if (isHost) {
     topicsComplete = false;
@@ -2294,7 +2336,15 @@ function updateTopicProgress(done, total) {
 }
 
 function initTopicScreen(done, total, forceReset) {
+  let preservedDraft = '';
   if (forceReset) {
+    if (currentScreenName === 'topic' && !myTopicSubmitted) {
+      const currentVal = (document.getElementById('topic-input').value || '').trim();
+      if (currentVal) {
+        saveTopicDraft(currentVal);
+      }
+    }
+    preservedDraft = loadTopicDraft();
     if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
     topicAckReceived = false;
   }
@@ -2311,7 +2361,7 @@ function initTopicScreen(done, total, forceReset) {
     return;
   }
   myTopicSubmitted = false;
-  document.getElementById('topic-input').value = '';
+  document.getElementById('topic-input').value = forceReset ? preservedDraft : '';
   document.getElementById('topic-submit-btn').textContent = '決定';
   document.getElementById('topic-submitted-msg').classList.add('hidden');
   updateTopicProgress(done || 0, total || players.length);
@@ -2756,7 +2806,7 @@ function abortGameToTitle() {
     clearHostState();
     clearGuestState();
     clearFinishedGame();
-    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
+    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); sessionStorage.removeItem('watashibunko_topic_draft'); } catch(e) {}
     clearDraft();
     stopHeartbeat();
     showScreen('title');
@@ -2787,7 +2837,7 @@ function playAgain() {
     clearHostState();
     clearGuestState();
     clearFinishedGame();
-    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
+    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); sessionStorage.removeItem('watashibunko_topic_draft'); } catch(e) {}
     clearDraft();
     stopHeartbeat();
     showScreen('title');
