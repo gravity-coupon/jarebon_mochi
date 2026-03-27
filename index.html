@@ -9,7 +9,7 @@
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
-  const APP_VERSION = 'v2.27';
+  const APP_VERSION = 'v2.28';
   gtag('js', new Date());
   gtag('set', { 'app_version': APP_VERSION });
   gtag('config', 'G-341D8LEXRV');
@@ -2039,7 +2039,7 @@ function handleGuestMessage(data) {
           document.getElementById('topic-submitted-msg').classList.remove('hidden');
           document.getElementById('topic-submit-btn').textContent = '変更';
           setTopicSubmitStatus('sending');
-          hostConn.send({ type: 'topicSubmit', topic: savedTopic });
+          sendTopicWithRetry(savedTopic);
         } else {
           initTopicScreen(topicCount, topicTotal, true);
         }
@@ -2094,6 +2094,8 @@ function handleGuestMessage(data) {
     renderLobbyPlayers();
   } else if (data.type === 'startTopicPhase') {
     try { sessionStorage.removeItem('watashibunko_topic'); } catch(e) {}
+    topicAckReceived = false;
+    if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
     if (roomId) startGuestHeartbeat(roomId, players[myIndex] || '');
     initTopicScreen(0, players.length, true);
   } else if (data.type === 'topicProgress') {
@@ -2121,14 +2123,20 @@ function handleGuestMessage(data) {
     if (partRetryTimer) { clearTimeout(partRetryTimer); partRetryTimer = null; }
     setSubmitStatus('confirmed');
   } else if (data.type === 'topicAck') {
+    topicAckReceived = true;
+    if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
     setTopicSubmitStatus('confirmed');
   } else if (data.type === 'showResults') {
     gameState = data.gameState;
+    if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
+    topicAckReceived = false;
     saveFinishedGame();
     stopHeartbeat();
     showResults();
   } else if (data.type === 'gameEnd') {
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
+    topicAckReceived = false;
     guestConnGen++;
     isSpectator = false;
     stopHeartbeat();
@@ -2137,6 +2145,8 @@ function handleGuestMessage(data) {
     hostConn = null;
   } else if (data.type === 'hostDisbanded') {
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
+    topicAckReceived = false;
     guestConnGen++;
     isSpectator = false;
     stopHeartbeat();
@@ -2227,14 +2237,40 @@ function submitTopic() {
   myTopicSubmitted = true;
   document.getElementById('topic-submitted-msg').classList.remove('hidden');
   document.getElementById('topic-submit-btn').textContent = '変更';
+  try { sessionStorage.setItem('watashibunko_topic', topic); } catch(e) {}
   if (isHost) {
     topicsComplete = false;
+    topicAckReceived = true;
+    if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
     setTopicSubmitStatus('confirmed');
     handleTopicFromPlayer(0, topic);
   } else {
     setTopicSubmitStatus('sending');
-    hostConn.send({ type: 'topicSubmit', topic });
-    try { sessionStorage.setItem('watashibunko_topic', topic); } catch(e) {}
+    sendTopicWithRetry(topic);
+  }
+}
+
+let topicAckReceived = false;
+let topicRetryTimer = null;
+
+function sendTopicWithRetry(topic, attempt) {
+  attempt = attempt || 0;
+  topicAckReceived = false;
+  if (topicRetryTimer) clearTimeout(topicRetryTimer);
+  try {
+    if (hostConn && hostConn.open) {
+      hostConn.send({ type: 'topicSubmit', topic });
+    }
+  } catch(e) {}
+  // Retry up to 3 times if no ack within 5 seconds
+  if (attempt < 3) {
+    topicRetryTimer = setTimeout(() => {
+      if (!topicAckReceived && myTopicSubmitted && currentScreenName === 'topic') {
+        dbg('GUEST topicSubmit retry attempt=' + (attempt + 1));
+        const latestTopic = (document.getElementById('topic-input').value || topic).trim() || topic;
+        sendTopicWithRetry(latestTopic, attempt + 1);
+      }
+    }, 5000);
   }
 }
 
@@ -2258,6 +2294,10 @@ function updateTopicProgress(done, total) {
 }
 
 function initTopicScreen(done, total, forceReset) {
+  if (forceReset) {
+    if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
+    topicAckReceived = false;
+  }
   // Preserve input and status if user already submitted and we're already on topic screen
   if (!forceReset && myTopicSubmitted && currentScreenName === 'topic') {
     // Just update progress, don't reset input/status
@@ -2303,6 +2343,8 @@ function handleTopicFromPlayer(pIdx, topic) {
 let isRestoring = false; // flag to prevent roundDone reset during host restore
 
 function startWritingRound(round) {
+  if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
+  topicAckReceived = false;
   if (partRetryTimer) { clearTimeout(partRetryTimer); partRetryTimer = null; }
   partAckReceived = false;
   const idx = isHost ? 0 : myIndex;
