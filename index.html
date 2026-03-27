@@ -12,7 +12,7 @@
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
-  const APP_VERSION = 'v2.36';
+  const APP_VERSION = 'v2.37';
   gtag('js', new Date());
   gtag('set', { 'app_version': APP_VERSION });
   gtag('config', 'G-341D8LEXRV');
@@ -467,6 +467,9 @@ function saveHostState() {
       roomId, numPages, timerSec, players, topicsCollected: topicsCollected || [],
       gameState: gameState ? JSON.parse(JSON.stringify(gameState)) : null,
       roundDoneList: [...roundDone], gamePhase, playerTokens,
+      timerDeadline: countdownDeadline || 0,
+      timerTotalMs: countdownTotal || 0,
+      timerPhase: activeTimerPhase || '',
     }));
   } catch(e) {}
 }
@@ -1560,6 +1563,8 @@ function reconnectToGuests() {
           topicsTotal: topicsCollected.length,
           isReverseConnection: true,
           token: revToken,
+          timerRemainingSec: activeTimerPhase && countdownDeadline > Date.now() ? Math.ceil((countdownDeadline - Date.now()) / 1000) : 0,
+          timerTotalSec: activeTimerPhase ? Math.ceil(countdownTotal / 1000) : 0,
         });
       });
       newConn.on('error', () => {
@@ -1689,6 +1694,8 @@ function handleHostMessage(conn, data) {
         topicsDone: topicsCollected.filter(t => t != null && t !== '').length,
         topicsTotal: topicsCollected.length,
         token: newToken,
+        timerRemainingSec: activeTimerPhase && countdownDeadline > Date.now() ? Math.ceil((countdownDeadline - Date.now()) / 1000) : 0,
+        timerTotalSec: activeTimerPhase ? Math.ceil(countdownTotal / 1000) : 0,
       });
       return;
     }
@@ -2196,6 +2203,12 @@ function handleGuestMessage(data) {
       updateWriteProgress(roundDone.size, gameState.numPlayers);
     } else if (phase === 'results' && gameState) {
       showResults();
+    }
+    // Restore countdown timer if active
+    if (data.timerRemainingSec > 0 && data.timerTotalSec > 0 && (phase === 'topic' || phase === 'writing')) {
+      startCountdown(phase === 'topic' ? 'topic' : 'writing', data.timerRemainingSec);
+      // Override total for correct bar proportion
+      countdownTotal = data.timerTotalSec * 1000;
     }
 
   } else if (data.type === 'playerList') {
@@ -2724,9 +2737,11 @@ let countdownTotal = 0;
 let countdownInterval = null;
 let hostTimerTimeout = null;
 let hostGraceTimeout = null;
+let activeTimerPhase = ''; // track which phase timer is active for
 
 function startCountdown(phase, totalSec) {
   stopCountdown();
+  activeTimerPhase = phase;
   countdownTotal = totalSec * 1000;
   countdownDeadline = Date.now() + countdownTotal;
   const prefix = phase === 'topic' ? 'topic' : 'write';
@@ -2740,6 +2755,7 @@ function stopCountdown() {
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
   if (hostTimerTimeout) { clearTimeout(hostTimerTimeout); hostTimerTimeout = null; }
   if (hostGraceTimeout) { clearTimeout(hostGraceTimeout); hostGraceTimeout = null; }
+  activeTimerPhase = '';
   countdownDeadline = 0;
   ['topic-timer', 'write-timer'].forEach(id => {
     const el = document.getElementById(id);
@@ -2773,12 +2789,51 @@ function hostStartTimer(phase, totalSec) {
   }, totalSec * 1000);
 }
 
+function restoreHostTimer(hostSaved, phase) {
+  if (!hostSaved.timerDeadline || !hostSaved.timerPhase || hostSaved.timerPhase !== phase) return;
+  const remaining = hostSaved.timerDeadline - Date.now();
+  if (remaining <= 0) {
+    // Timer already expired during reload — enforce immediately
+    setTimeout(() => hostEnforceTimeUp(phase), 500);
+    return;
+  }
+  const remainingSec = Math.ceil(remaining / 1000);
+  const totalMs = hostSaved.timerTotalMs || (timerSec * 1000);
+  startCountdown(phase, remainingSec);
+  countdownTotal = totalMs;
+  hostTimerTimeout = setTimeout(() => { hostEnforceTimeUp(phase); }, remaining);
+}
+
 function hostEnforceTimeUp(phase) {
   if (!isHost) return;
   // Notify all guests — they auto-submit current text
   broadcast({ type: 'timeUp' });
+
+  // Host self-submit immediately (host has local access to text)
   if (phase === 'topic') {
-    // Grace period: let guests send their typed topics, then fill missing
+    if (topicsCollected[0] == null || topicsCollected[0] === '') {
+      const topic = (document.getElementById('topic-input').value || '').trim() || '無題';
+      myTopicSubmitted = true;
+      document.getElementById('topic-submitted-msg').classList.remove('hidden');
+      document.getElementById('topic-submit-btn').textContent = '変更';
+      setTopicSubmitStatus('confirmed');
+      handleTopicFromPlayer(0, topic);
+    }
+  } else if (phase === 'writing' && gameState) {
+    if (!roundDone.has(0)) {
+      const text = (document.getElementById('write-input').value || '').trim() || '……';
+      const clipped = text.slice(0, CHAR_LIMIT);
+      mySubmitted = true;
+      myLastSubmittedText = clipped;
+      document.getElementById('write-submitted-msg').classList.remove('hidden');
+      setSubmitStatus('confirmed');
+      document.getElementById('write-submit-btn').textContent = '再提出';
+      handlePartFromPlayer(0, myStoryIndex, gameState.currentRound, clipped, false);
+    }
+  }
+
+  // Grace period: wait for guest auto-submits, then proxy-submit remaining
+  if (phase === 'topic') {
     hostGraceTimeout = setTimeout(() => {
       if (gamePhase !== 'topic') return;
       for (let i = 0; i < topicsCollected.length; i++) {
@@ -2788,7 +2843,6 @@ function hostEnforceTimeUp(phase) {
       }
     }, 3000);
   } else if (phase === 'writing' && gameState) {
-    // Grace period: wait for auto-submits, then proxy-submit remaining
     hostGraceTimeout = setTimeout(() => {
       if (!gameState || gamePhase !== 'writing') return;
       const np = gameState.numPlayers;
@@ -3185,7 +3239,7 @@ window.addEventListener('load', () => {
     myIndex = 0;
     roomId = hostSaved.roomId;
     numPages = hostSaved.numPages;
-    timerSec = hostSaved.timerSec || 210;
+    timerSec = hostSaved.timerSec || 0;
     players = hostSaved.players || [];
     topicsCollected = (hostSaved.topicsCollected || []).map(t => t == null ? undefined : t);
     gameState = hostSaved.gameState;
@@ -3210,6 +3264,7 @@ window.addEventListener('load', () => {
       const count = topicsCollected.filter(t => t != null && t !== '').length;
       initTopicScreen(count, topicsCollected.length);
       startHostHeartbeat();
+      restoreHostTimer(hostSaved, 'topic');
     } else if (gamePhase === 'writing' && gameState) {
       isRestoring = true;
       startWritingRound(gameState.currentRound);
@@ -3219,6 +3274,7 @@ window.addEventListener('load', () => {
         document.getElementById('write-submit-btn').textContent = '再提出';
       }
       isRestoring = false;
+      restoreHostTimer(hostSaved, 'writing');
     } else if (gamePhase === 'results' && gameState) {
       showResults();
     }
