@@ -12,7 +12,7 @@
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
-  const APP_VERSION = 'v2.38';
+  const APP_VERSION = 'v2.39';
   gtag('js', new Date());
   gtag('set', { 'app_version': APP_VERSION });
   gtag('config', 'G-341D8LEXRV');
@@ -2889,9 +2889,15 @@ function guestHandleTimeUp() {
   }
 }
 
-// Foreground recovery: immediately update countdown
+// Foreground recovery: update countdown and trigger timeUp if expired while in background
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && countdownInterval) {
+  if (document.visibilityState !== 'visible') return;
+  if (countdownDeadline > 0 && Date.now() >= countdownDeadline && !isHost) {
+    // Timer expired while guest was in background — trigger auto-submit
+    guestHandleTimeUp();
+    return;
+  }
+  if (countdownInterval) {
     const prefix = (currentScreenName === 'topic') ? 'topic' : 'write';
     updateCountdownUI(prefix);
   }
@@ -3265,7 +3271,15 @@ window.addEventListener('load', () => {
       });
     } else if (gamePhase === 'topic') {
       const count = topicsCollected.filter(t => t != null && t !== '').length;
-      initTopicScreen(count, topicsCollected.length);
+      initTopicScreen(count, topicsCollected.length, true);
+      // Restore host's submitted state if applicable
+      if (topicsCollected[0] != null && topicsCollected[0] !== '') {
+        myTopicSubmitted = true;
+        document.getElementById('topic-input').value = topicsCollected[0];
+        document.getElementById('topic-submitted-msg').classList.remove('hidden');
+        document.getElementById('topic-submit-btn').textContent = '変更';
+        setTopicSubmitStatus('confirmed');
+      }
       startHostHeartbeat();
       restoreHostTimer(hostSaved, 'topic');
     } else if (gamePhase === 'writing' && gameState) {
