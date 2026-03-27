@@ -9,7 +9,7 @@
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
-  const APP_VERSION = 'v2.30';
+  const APP_VERSION = 'v2.31';
   gtag('js', new Date());
   gtag('set', { 'app_version': APP_VERSION });
   gtag('config', 'G-341D8LEXRV');
@@ -2164,8 +2164,18 @@ function handleGuestMessage(data) {
     isSpectator = false;
     stopHeartbeat();
     clearGuestState();
+    clearFinishedGame();
+    clearTopicDraft();
+    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); sessionStorage.removeItem('watashibunko_topic_draft'); } catch(e) {}
+    clearDraft();
+    gameState = null;
+    players = [];
+    myIndex = -1;
+    roomId = '';
+    gamePhase = 'idle';
     if (peer) { peer.destroy(); peer = null; }
     hostConn = null;
+    showScreen('title');
   } else if (data.type === 'hostDisbanded') {
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     if (topicRetryTimer) { clearTimeout(topicRetryTimer); topicRetryTimer = null; }
@@ -2174,6 +2184,15 @@ function handleGuestMessage(data) {
     isSpectator = false;
     stopHeartbeat();
     clearGuestState();
+    clearFinishedGame();
+    clearTopicDraft();
+    try { sessionStorage.removeItem('watashibunko_token'); sessionStorage.removeItem('watashibunko_topic'); sessionStorage.removeItem('watashibunko_topic_draft'); } catch(e) {}
+    clearDraft();
+    gameState = null;
+    players = [];
+    myIndex = -1;
+    roomId = '';
+    gamePhase = 'idle';
     if (peer) { peer.destroy(); peer = null; }
     hostConn = null;
     showScreen('title');
@@ -2215,14 +2234,11 @@ function handleGuestMessage(data) {
       }
       if (data.gamePhase === 'results') {
         document.getElementById('results-subtitle').textContent = gameState.stories.length + ' つの物語が完成しました';
-        // Game finished — release spectator (same as gameEnd)
+        // Keep the spectator connection alive so a later gameEnd from the host can clear saved results.
         saveFinishedGame();
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-        guestConnGen++;
-        isSpectator = false;
+        stopHeartbeat();
         clearGuestState();
-        if (peer) { peer.destroy(); peer = null; }
-        hostConn = null;
       } else {
         document.getElementById('results-subtitle').textContent = '👀 観戦中 — 物語が進行中です（ラウンド ' + (gameState.currentRound + 1) + '/' + gameState.totalRounds + '）';
       }
@@ -2729,7 +2745,7 @@ function renderResultsTabs() {
   gameState.stories.forEach((s, i) => {
     const btn = document.createElement('button');
     btn.className = 'story-tab' + (i === currentStoryView ? ' active' : '');
-    btn.textContent = s.title;
+    btn.textContent = (i + 1) + '. ' + s.title;
     btn.onclick = () => { currentStoryView = i; renderResultsTabs(); renderStory(i); };
     cont.appendChild(btn);
   });
